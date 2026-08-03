@@ -39,11 +39,30 @@ public record PrincipalProperties(List<DevelopmentPrincipal> principals) {
         }
     }
 
+    /**
+     * Reserved prefix marking a principal as a development credential. Configuration carrying it
+     * is committed to the repository and therefore public knowledge; {@code PrincipalConfiguration}
+     * refuses to start outside the dev profile when any principal bears it.
+     */
+    public static final String DEVELOPMENT_USERNAME_PREFIX = "dev-";
+
     /** The principal with this exact username, if one is configured. */
     public Optional<DevelopmentPrincipal> findByUsername(String username) {
         return principals.stream()
                 .filter(principal -> principal.username().equals(username))
                 .findFirst();
+    }
+
+    /**
+     * Usernames carrying {@link #DEVELOPMENT_USERNAME_PREFIX}. Kept here as a pure query so the
+     * profile-dependent <em>policy</em> stays in the wiring layer, mirroring how
+     * {@code JwtKeyMaterial} takes an explicit flag rather than reading the Environment.
+     */
+    public List<String> developmentUsernames() {
+        return principals.stream()
+                .map(DevelopmentPrincipal::username)
+                .filter(username -> username.startsWith(DEVELOPMENT_USERNAME_PREFIX))
+                .toList();
     }
 
     /**

@@ -72,7 +72,7 @@ class SecurityAuthorizationTests {
         Instant longAgo = Instant.now().minusSeconds(7200);
         String expired = token(claims -> claims
                 .issuer("egas")
-                .subject("dev-educator")
+                .subject("test-educator")
                 .issuedAt(longAgo)
                 .expiresAt(longAgo.plusSeconds(60))
                 .claim("roles", List.of("EDUCATOR")));
@@ -87,7 +87,7 @@ class SecurityAuthorizationTests {
         Instant now = Instant.now();
         String foreign = token(claims -> claims
                 .issuer("not-egas")
-                .subject("dev-educator")
+                .subject("test-educator")
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(300))
                 .claim("roles", List.of("EDUCATOR")));
@@ -101,7 +101,7 @@ class SecurityAuthorizationTests {
         mvc.perform(post("/auth/token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"username":"dev-educator","password":"dev-educator-password"}"""))
+                                {"username":"test-educator","password":"test-educator-password"}"""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.access_token").isNotEmpty());
     }
@@ -109,14 +109,14 @@ class SecurityAuthorizationTests {
     @Test
     void aLearnerMayReadTheRegistry() throws Exception {
         mvc.perform(get("/api/frameworks")
-                        .header(HttpHeaders.AUTHORIZATION, bearer("dev-learner", "dev-learner-password")))
+                        .header(HttpHeaders.AUTHORIZATION, bearer("test-learner", "test-learner-password")))
                 .andExpect(status().isOk());
     }
 
     @Test
     void aLearnerMayNotRegisterAndIsForbiddenRatherThanUnauthorised() throws Exception {
         mvc.perform(post("/api/frameworks")
-                        .header(HttpHeaders.AUTHORIZATION, bearer("dev-learner", "dev-learner-password"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer("test-learner", "test-learner-password"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(framework("Security Learner Denied Framework")))
                 .andExpect(status().isForbidden());
@@ -125,7 +125,7 @@ class SecurityAuthorizationTests {
     @Test
     void anEducatorMayRegister() throws Exception {
         mvc.perform(post("/api/frameworks")
-                        .header(HttpHeaders.AUTHORIZATION, bearer("dev-educator", "dev-educator-password"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer("test-educator", "test-educator-password"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(framework("Security Educator Framework")))
                 .andExpect(status().isCreated());
@@ -134,7 +134,7 @@ class SecurityAuthorizationTests {
     @Test
     void anAdminMayRegister() throws Exception {
         mvc.perform(post("/api/frameworks")
-                        .header(HttpHeaders.AUTHORIZATION, bearer("dev-admin", "dev-admin-password"))
+                        .header(HttpHeaders.AUTHORIZATION, bearer("test-admin", "test-admin-password"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(framework("Security Admin Framework")))
                 .andExpect(status().isCreated());
@@ -142,7 +142,7 @@ class SecurityAuthorizationTests {
 
     @Test
     void completesAFullIssueThenRegisterThenReadCycle() throws Exception {
-        String authorization = bearer("dev-educator", "dev-educator-password");
+        String authorization = bearer("test-educator", "test-educator-password");
 
         String created = mvc.perform(post("/api/frameworks")
                         .header(HttpHeaders.AUTHORIZATION, authorization)

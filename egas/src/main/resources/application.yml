@@ -57,28 +57,22 @@ egas:
       #                          misconfiguration that matters most.
       # Exactly one of the two -> rejected in every profile; half-configuration is operator error.
 
-    # DEVELOPMENT PRINCIPALS ONLY (ADR-013). Identity persistence — accounts, registration,
-    # credential storage — is intentionally outside Step 3 scope; these entries are a
-    # development-time construct, not a user store.
+    # NO PRINCIPALS ARE DEFINED HERE, DELIBERATELY. The development roster lives in
+    # application-dev.yml, which Spring loads only under the dev profile, so a deployed instance
+    # cannot inherit development credentials by forgetting to override them.
     #
-    # Passwords are BCrypt-hashed below and are deliberately non-secret, matching the username:
-    #   dev-educator / dev-educator-password
-    #   dev-learner  / dev-learner-password
-    #   dev-admin    / dev-admin-password
+    # A real deployment supplies its own roster through the environment, e.g.
+    #   EGAS_SECURITY_PRINCIPALS_0_USERNAME / _PASSWORD_HASH / _ROLES
+    # (Spring Boot replaces rather than merges collections across property sources, so an
+    # environment-supplied roster fully displaces any file-based one.)
     #
-    # Any real deployment MUST override this list via the environment
-    # (EGAS_SECURITY_PRINCIPALS_0_USERNAME, ..._PASSWORD_HASH, ..._ROLES) or replace the
-    # mechanism outright. Never add a production credential — hashed or otherwise — to this file.
-    principals:
-      - username: dev-educator
-        password-hash: "$2a$10$ZFQB0PhlYmITvFQK5Dt24uD5s2/c1IS2IVFp6ssAFkQRYt9D8GJ/S"
-        roles: [EDUCATOR]
-      - username: dev-learner
-        password-hash: "$2a$10$bcmaCVDKn82vBcSbajAWveDMEz9wWn/u8EvmE5Ak6Lb96aZGwdOj6"
-        roles: [LEARNER]
-      - username: dev-admin
-        password-hash: "$2a$10$vwCztp4bU4EV.ZNi8cYfhO/xJQRnVi.qQvAUnUmfyFtJ8u7U5Yafa"
-        roles: [ADMIN]
+    # Usernames beginning with 'dev-' are reserved for development principals and are REJECTED at
+    # startup outside the dev profile (PrincipalConfiguration) — the credential-side counterpart
+    # of the ADR-013/A5 key policy, so dev credentials fail loudly rather than silently.
+    #
+    # With no roster and no override, the token endpoint authenticates nobody: the instance fails
+    # closed. That is a deliberate posture, not an oversight — a running instance with no way in
+    # is safe, whereas one with well-known credentials is not.
 
 management:
   endpoints:

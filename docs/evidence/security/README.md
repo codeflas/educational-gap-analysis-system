@@ -5,10 +5,14 @@ as figures for the dissertation's security section.
 
 | # | Artefact | File | How it is produced | Present |
 |---|----------|------|--------------------|---------|
-| 1 | JWT issuance flow | `01-jwt-issuance-flow.md` | `capture-evidence.sh` | generated on demand |
-| 2 | Swagger bearer authorisation | `02-swagger-bearer-authorization.png` | manual screenshot | **not yet captured** |
-| 3 | 401 authentication failure | `03-401-authentication-failure.md` | `capture-evidence.sh` | generated on demand |
-| 4 | 403 authorisation failure | `04-403-authorization-failure.md` | `capture-evidence.sh` | generated on demand |
+| 1 | JWT issuance flow | `01-jwt-issuance-flow.md` | `capture-evidence.sh` | captured (regenerable) |
+| 2 | Swagger bearer authorisation | `02-swagger-bearer-authorization.png` | manual screenshot | **captured** |
+| 3 | 401 authentication failure | `03-401-authentication-failure.md` | `capture-evidence.sh` | captured (regenerable) |
+| 4 | 403 authorisation failure | `04-403-authorization-failure.md` | `capture-evidence.sh` | captured (regenerable) |
+
+All four artefacts are committed. The three transcripts carry the capture timestamp of the run
+that produced them and can be regenerated at any time by the instructions below; the screenshot
+is a one-off manual capture.
 
 Nothing in this directory is fabricated. The three transcripts are regenerated from a live
 instance rather than committed as prose, so they cannot drift away from the system's actual
@@ -50,8 +54,12 @@ will not verify against a later instance — expected, and worth noting when com
 ## Credentials
 
 The development principals (`dev-educator`, `dev-learner`, `dev-admin`) and their BCrypt hashes
-live in `egas/src/main/resources/application.yml`, with the plaintext passwords documented there
-in a comment. They are deliberately non-secret and exist only for development; ADR-013 records
-identity persistence as intentionally outside Step 3 scope, and any real deployment overrides the
-roster through the environment. No production credential belongs in this repository, hashed or
-otherwise.
+live in `egas/src/main/resources/application-dev.yml`, with the plaintext passwords documented
+there in a comment. Spring loads that file only under the `dev` profile, so the roster cannot
+reach a deployed instance; as a second line of defence, a principal whose username carries the
+reserved `dev-` prefix aborts startup outside the profile. Both mechanisms exist because these
+credentials are committed and therefore public knowledge.
+
+They are deliberately non-secret and exist only for development; ADR-013 records identity
+persistence as intentionally outside Step 3 scope, and any real deployment supplies its own roster
+through the environment. No production credential belongs in this repository, hashed or otherwise.

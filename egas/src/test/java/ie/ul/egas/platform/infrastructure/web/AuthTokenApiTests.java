@@ -23,11 +23,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * whole chain (controller → TokenService → encoder → decoder) agrees, not merely that a string
  * came back.
  *
- * <p>Requests carry {@code .with(user(...))} because the deny-by-default chain from Step 1 is
- * still in force and this phase deliberately leaves {@code SecurityConfig} untouched; the
- * endpoint itself ignores that authentication. Proving the endpoint is reachable
- * <em>unauthenticated</em> requires the {@code permitAll} rule that arrives with the
- * SecurityConfig rewrite, and that assertion belongs to the phase which introduces it.
+ * <p>Requests carry {@code .with(user(...))}, which is now redundant — {@code /auth/token} is
+ * {@code permitAll} — but harmless, and retained because these tests assert the endpoint's
+ * contract rather than its reachability. That the endpoint answers an <em>unauthenticated</em>
+ * caller is asserted where it belongs, alongside the rest of the filter-chain behaviour, in
+ * {@code SecurityAuthorizationTests}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthTokenApiTests {
 
     private static final String CREDENTIALS = """
-            {"username":"dev-educator","password":"dev-educator-password"}""";
+            {"username":"test-educator","password":"test-educator-password"}""";
 
     @Autowired
     MockMvc mvc;
@@ -66,7 +66,7 @@ class AuthTokenApiTests {
 
         Jwt decoded = jwtDecoder.decode(accessToken(body));
         assertThat(decoded.getHeaders()).containsEntry("alg", "RS256");
-        assertThat(decoded.getSubject()).isEqualTo("dev-educator");
+        assertThat(decoded.getSubject()).isEqualTo("test-educator");
         assertThat(decoded.getClaimAsString("iss")).isEqualTo("egas");
         assertThat(decoded.getClaimAsStringList("roles")).containsExactly("EDUCATOR");
         assertThat(decoded.getExpiresAt()).isAfter(decoded.getIssuedAt());
@@ -78,15 +78,15 @@ class AuthTokenApiTests {
                         .with(user("anyone"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"username":"dev-educator","password":"not-the-password"}"""))
+                                {"username":"test-educator","password":"not-the-password"}"""))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.detail").value("Invalid username or password."));
     }
 
     @Test
     void answersAnUnknownUserAndAWrongPasswordIdentically() throws Exception {
-        String wrongPassword = failedLogin("dev-educator", "not-the-password");
-        String unknownUser = failedLogin("no-such-user", "dev-educator-password");
+        String wrongPassword = failedLogin("test-educator", "not-the-password");
+        String unknownUser = failedLogin("no-such-user", "test-educator-password");
 
         assertThat(unknownUser)
                 .as("anti-enumeration: the response must not reveal whether the username exists")
@@ -99,7 +99,7 @@ class AuthTokenApiTests {
                         .with(user("anyone"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"username":"dev-educator"}"""))
+                                {"username":"test-educator"}"""))
                 .andExpect(status().isBadRequest());
     }
 

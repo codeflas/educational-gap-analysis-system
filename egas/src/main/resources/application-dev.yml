@@ -1,0 +1,28 @@
+# Development profile only — loaded when the 'dev' profile is active, and never otherwise.
+# `mvn spring-boot:run` activates it (see spring-boot-maven-plugin in pom.xml); a packaged jar
+# does not, so none of the below can reach a deployed instance by accident.
+#
+# DEVELOPMENT PRINCIPALS (ADR-013). Identity persistence — accounts, registration, credential
+# storage — is intentionally outside Step 3 scope; these entries are a development-time
+# construct, not a user store.
+#
+# The passwords are BCrypt-hashed below and are deliberately non-secret:
+#   dev-educator / dev-educator-password
+#   dev-learner  / dev-learner-password
+#   dev-admin    / dev-admin-password
+#
+# The 'dev-' username prefix is reserved: PrincipalConfiguration aborts startup if a principal
+# carrying it is present outside this profile. Never add a production credential to this file —
+# hashed or otherwise — and never widen this roster to another profile.
+egas:
+  security:
+    principals:
+      - username: dev-educator
+        password-hash: "$2a$10$ZFQB0PhlYmITvFQK5Dt24uD5s2/c1IS2IVFp6ssAFkQRYt9D8GJ/S"
+        roles: [EDUCATOR]
+      - username: dev-learner
+        password-hash: "$2a$10$bcmaCVDKn82vBcSbajAWveDMEz9wWn/u8EvmE5Ak6Lb96aZGwdOj6"
+        roles: [LEARNER]
+      - username: dev-admin
+        password-hash: "$2a$10$vwCztp4bU4EV.ZNi8cYfhO/xJQRnVi.qQvAUnUmfyFtJ8u7U5Yafa"
+        roles: [ADMIN]

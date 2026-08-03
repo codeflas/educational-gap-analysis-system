@@ -50,9 +50,12 @@ class HexagonalArchitectureTests {
             .should().dependOnClassesThat().resideInAnyPackage(
                     "..infrastructure..",
                     "org.springframework.web..",
+                    "org.springframework.security..",
                     "jakarta.servlet..",
                     "jakarta.persistence..")
-            .because("use-case services depend on ports, never on adapter technology");
+            .because("use-case services depend on ports, never on adapter technology — and, per "
+                    + "ADR-016, they receive the caller's identity as an explicit command field "
+                    + "rather than reading it from SecurityContextHolder's ambient state");
 
     @ArchTest
     static final ArchRule restControllersOnlyInWebAdapters = classes()
