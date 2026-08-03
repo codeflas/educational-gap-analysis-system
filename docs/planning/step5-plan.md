@@ -164,18 +164,29 @@ No event bus, no broker, no republication API, no choreography between other con
 | V1–V99 | `common` | `V2__create_event_publication_registry.sql` | **NEW** — infrastructure |
 | V100–V199 | `competency` | unchanged | Competency Modelling |
 | V200–V299 | `learner` | unchanged | Learner Profiling |
-| V400–V499 | `gap_analysis` | `V400__create_gap_analysis_tables.sql` | **NEW** — Gap Analysis |
+| V400–V499 | `gap_analysis` | `V400__create_competency_projection.sql` (phase 2) | **NEW** — Gap Analysis |
+| V400–V499 | `gap_analysis` | `V401__create_gap_report_tables.sql` (phase 4) | **NEW** — Gap Analysis |
 
 `V2__` creates the Modulith publication registry in `common` under ADR-011 Amendment 1: it holds
 framework-managed metadata no module could own, and placing it in a business schema would make one
 context custodian of another's delivery state. Flyway's own `flyway_schema_history` is the existing
 precedent.
 
-`V400__` creates the projection tables (`projected_framework`, `projected_competency`) and the gap
-tables (`gap_report`, `skill_gap`, plus evidence provenance). Snapshots are stored as columns per
-ADR-021, since a report must remain explicable after its inputs move. Foreign keys inside
-`gap_analysis` only; `competency_id`, `framework_id` and `learner_id` are unkeyed identifier values
-(ADR-011, ADR-019).
+The `gap_analysis` schema is built by **two** migrations, one per phase that needs it. `V400__`
+creates the projection tables; `V401__` creates the gap tables (`gap_report`, `skill_gap`, plus
+evidence provenance), where snapshots are stored as columns per ADR-021 since a report must remain
+explicable after its inputs move. Foreign keys inside `gap_analysis` only; `competency_id`,
+`framework_id` and `learner_id` are unkeyed identifier values (ADR-011, ADR-019).
+
+> **Amendment A4 (4 Aug 2026, phase 2).** This section originally named a single
+> `V400__create_gap_analysis_tables.sql` carrying both sets of tables. They are **split**, because
+> the phases that need them are separate: shipping the gap tables in phase 2 would add a schema no
+> code reads and no test exercises, and a migration is the one artefact that cannot be quietly
+> revised once applied. Delivered in phase 2: `V400__create_competency_projection.sql`, creating
+> `projected_framework`, `projected_level`, `projected_competency` and
+> `projected_competency_level` — four tables rather than the two this section anticipated, because
+> a framework's proficiency scale and a competency's defined levels are both collections and
+> neither is derivable from the other.
 
 ---
 
@@ -204,7 +215,7 @@ All nine architecture tests are expected to pass **unmodified**.
 | Phase | Content | Gate |
 |---|---|---|
 | **1 — Contracts + event infrastructure** | `competency.api` event and snapshot; the in-module compiler; `learner.api` query and its adapter; `spring-modulith-starter-jpa`; `V2__` registry. | Green; event round-trip asserted with `PublishedEvents`; **producer diff measured** |
-| **2 — Projection** | `V400__` projection tables; `@ApplicationModuleListener`; projection repository and adapter. | Green; registering a framework populates the projection end to end |
+| **2 — Projection** | `V400__` projection tables (A4: projection only; gap tables move to `V401__` in phase 4); `@ApplicationModuleListener`; projection repository and adapter. | **Delivered**: green; **+16 (184 actual)**; registering a framework populates the projection end to end, with delivery proven to travel the durable registry |
 | **3 — Domain** | `GapReport`, `SkillGap`, snapshots, `GapSeverityPolicy` + default. Framework-free. | Green; severity substitutable via a lambda |
 | **4 — Application + persistence** | `GapAnalysisService`, `AnalyseGapCommand`, gap tables and adapter, ownership per ADR-015 A1/ADR-016. | Green; ownership matrix with no security infrastructure |
 | **5 — Web adapter** | Controller, mapper, advice, DTOs; `SecurityConfig` gap rules. | Green; role/ownership matrix with real tokens; 404 non-disclosure |
