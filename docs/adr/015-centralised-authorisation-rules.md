@@ -68,3 +68,52 @@ which URL patterns cannot express. The designated extension point is a hybrid: c
 here, and ownership predicates are evaluated at the application level where the resource is in
 hand. That extension is to be recorded as an amendment to this ADR when it lands, keeping the
 rationale for the split in one place.
+
+---
+
+## Amendment 1 — ownership authorisation at the application layer (Step 4, Accepted 2026-08-03)
+
+This ADR's Future Evolution section reserved an amendment for the moment resource ownership first
+needed expressing. Step 4 (Learner Profiling) is that moment, and this is that amendment. The
+original decision is unchanged: coarse authorisation remains an ordered rule set in the single
+filter chain, terminating in `anyRequest().authenticated()`.
+
+**What is added.** A learner profile is owned by exactly one principal, and the predicate "this
+caller may read this profile" needs the profile in hand — which a URL pattern, by this ADR's own
+admission, cannot express. Ownership is therefore evaluated in `LearnerProfileService`, against the
+loaded aggregate, using the caller's subject supplied as an explicit command field under ADR-016.
+The aggregate itself answers `isOwnedBy(AuthSubject)`; the service decides what to do about the
+answer.
+
+**The rules added to the chain**, before the terminal rule:
+
+    GET  /api/learners        -> hasAnyRole(EDUCATOR, ADMIN)
+         /api/learners/**     -> authenticated()
+
+Listing every profile is a coarse, role-shaped question and stays here. Everything else under
+`/api/learners/**` is admitted by the chain on authentication alone and decided on ownership by the
+application layer, because the chain cannot see whose profile is being requested. Order is
+semantically significant — the list rule must precede the general one — and is asserted cell by
+cell in `LearnerProfileOwnershipTests` rather than trusted to review.
+
+**Role interpretation stays in the security layer.** The `learner` module declares
+`allowedDependencies = {"competency :: api"}` and so cannot reference `Role`, which lives in
+`platform`. Passing role names inward would smuggle the security vocabulary across the boundary in
+all but name. Instead the web adapter resolves the role question to a single boolean —
+`callerMayReadAny` — and passes that. The security layer decides *policy* ("educators see all
+profiles"); the application layer performs *enforcement* ("this caller may see this resource").
+Neither knows the other's vocabulary.
+
+**Non-disclosure on denial.** A learner requesting another learner's profile receives `404`, not
+`403`. A `403` would confirm that the identifier names a real profile, turning the endpoint into an
+enumeration oracle over learner identifiers; `404` makes present-and-forbidden indistinguishable
+from absent. The cost is a less precise diagnostic for a caller who genuinely mistyped an
+identifier, which is the correct side to err on for a resource holding personal data. Insufficient
+*role* — a learner attempting to list all profiles — still yields `403` from the filter chain,
+because that answer discloses nothing about any particular resource.
+
+**Consequence for the reader.** The complete access policy for learner profiles is now in two
+places: the ordered rules here, and the ownership predicate in the application service. This ADR
+already recorded that split as the accepted cost of a chain that cannot express ownership; this
+amendment makes it concrete rather than hypothetical, and the two locations are named in the module
+diagram so neither can be read without the other.

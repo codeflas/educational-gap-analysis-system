@@ -21,6 +21,9 @@ Full texts to be transcribed from the design log; statuses reflect the architect
 | 014 | Platform web-adapter convention (`platform.infrastructure.web`) | Accepted |
 | 015 | Authorisation: centralised URL-pattern rules in one filter chain | Accepted |
 | 016 | Identity propagation: caller identity as command data, not ambient state | Accepted |
+| 017 | Learner identity mapping: auth subject on the profile, explicit provisioning | Accepted |
+| 018 | Evidence-backed proficiency with a substitutable level-resolution policy | Accepted |
+| 019 | Cross-context reference integrity: competency identifiers unvalidated | Accepted |
 
 **ADR-010 realisation note (Step 3).** ADR-010 fixed authentication and authorisation as
 self-issued RSA JWTs validated by a Spring OAuth2 resource server. It is realised in Step 3 and
