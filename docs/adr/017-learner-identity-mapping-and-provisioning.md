@@ -36,7 +36,7 @@ layer on the module's behalf.
 
 ## Decision
 Option 3. `LearnerProfile` carries an `AuthSubject` value object alongside its independent
-`LearnerId`, and `learner.learner_profile.auth_subject` carries a unique constraint. The mapping
+`LearnerId`, and `learner.profile.auth_subject` carries a unique constraint. The mapping
 is resolved by `LearnerProfileRepository.findByAuthSubject`, so it remains an application-boundary
 concern in the sense the Step 1 javadoc intends — the domain never asks who is authenticated, it
 is told — while staying one table, one lookup, and one database-enforced invariant.
@@ -58,6 +58,11 @@ check in the application service and by the unique constraint, whose violation t
 adapter translates back into `DuplicateLearnerProfileException`. The check is a courtesy; the
 constraint is the authority. This is the check-then-act pattern already proven for framework
 registration in Step 2.
+
+*Correction (Step 4 Phase 3, 2026-08-03): this section originally named the table
+`learner.learner_profile`, the name the Step 4 plan proposed before implementation. The table
+delivered by `V200__create_learner_profile_tables.sql` is `learner.profile`, and the constraint is
+`uq_learner_auth_subject`. The decision is unchanged; only the identifier is corrected.*
 
 ## Consequences
 `/me` resolves in a single indexed lookup. A learner's domain identity survives any change of

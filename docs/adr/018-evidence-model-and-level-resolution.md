@@ -95,6 +95,24 @@ substitutable in isolation), testability (+ lambda policies isolate aggregate te
 resolution arithmetic), auditability (+ append-only evidence), storage growth (− unbounded
 evidence per assertion), consistency (− stored resolutions do not follow a policy change).
 
+## Amendment 1 — the recording timestamp is system-assigned (Step 4 Phase 3, Accepted 2026-08-03)
+
+This ADR fixed `recordedAt` as part of the evidence record but left unstated who supplies it. Phase 3
+settles it: the application service stamps evidence from the injected `Clock`, and
+`RecordEvidenceCommand` carries no timestamp field at all.
+
+The reason is not tidiness. The default policy breaks confidence ties **by recency**, so a
+caller-supplied timestamp is an input to the system's judgement about that caller's own proficiency:
+post-dating a self-declared claim would win the tie-break and raise the resolved level, and nothing
+could verify the value. Removing the field removes the lever.
+
+The cost is that `recordedAt` now means *when the system recorded this*, not *when the observation
+occurred* — and the example in this ADR's own Decision section ("an SFIA self-assessment from March
+2026") describes the latter. That distinction is accepted rather than blurred: should the date an
+observation actually occurred become necessary, it arrives as a **separate `observedAt` field**,
+caller-supplied and explicitly unverified, leaving `recordedAt` meaning what its name says. Widening
+`recordedAt` to carry both meanings would reintroduce the tie-break lever under a different name.
+
 ## Future evolution
 Evidence revision and supersession — marking a record superseded rather than appending beside it —
 is the natural next increment and needs no schema change beyond a flag. A re-resolution service
