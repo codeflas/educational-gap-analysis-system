@@ -35,6 +35,33 @@ that is precisely the consistency model a future distributed deployment would im
 Modifiability (+), evolvability/extractability (+), integrity across contexts (- managed),
 performance (neutral; no cross-schema joins were intended).
 
+## Amendment 1 — framework-managed infrastructure metadata belongs to `common` (Step 5, Accepted 2026-08-03)
+
+Step 5 introduces durable Spring Modulith event publication, whose registry table records which
+listener has consumed which event. That table has no owner under the rule above: it belongs to no
+context, it is written by the framework rather than by any module's code, and placing it in a
+business schema would make one context's schema the custodian of another's delivery state — the
+precise coupling this ADR exists to prevent.
+
+**Decision.** Framework-managed infrastructure metadata lives in the `common` schema, created by the
+common migration range (V1–V99). Business data remains module-owned without exception.
+
+The distinguishing test is **who owns the rows**. A module's schema holds data that module's domain
+is responsible for and could take with it if extracted. The publication registry holds neither: no
+domain object corresponds to a row, no module could meaningfully claim it, and on extraction each
+service would simply create its own. Flyway's own `flyway_schema_history` is the existing precedent
+for infrastructure state that sits outside the module map, and this amendment states the principle
+that case was already following.
+
+The prohibition on cross-schema foreign keys is unchanged and unaffected: the registry references
+nothing, and nothing references it.
+
+**Scope limit.** This admits infrastructure metadata into `common`; it does not admit shared
+business tables, and it is not a licence to place anything convenient there. A table qualifies only
+if no module could own it — which is a narrow test, and deliberately so.
+
 ## Future evolution
 Per-module database credentials with schema-scoped grants would upgrade the convention to a
-hard guarantee; noted as hardening beyond dissertation scope.
+hard guarantee; noted as hardening beyond dissertation scope. Should a second piece of
+framework-managed metadata appear, it joins the registry in `common` under Amendment 1's test
+rather than prompting a new decision.

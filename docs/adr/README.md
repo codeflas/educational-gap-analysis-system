@@ -11,7 +11,7 @@ Full texts to be transcribed from the design log; statuses reflect the architect
 | 004 | Technology stack: Java 21, Boot 3.4, Modulith, PostgreSQL, React/TS | Accepted |
 | 005 | Persistence: PostgreSQL + JSONB models + in-memory pathway graph | Accepted |
 | 006 | Recommendation: knowledge-based core, Strategy port, ExplanationPort | Accepted |
-| 007 | CQRS scope: compiled competency-model read projection only | Accepted |
+| 007 | CQRS scope: compiled competency-model read projection only | Accepted (text recovered) |
 | 008 | Boundary enforcement: Modulith verify + ArchUnit fitness functions | Accepted |
 | 009 | API style: REST + OpenAPI (GraphQL as documented evolution) | Accepted |
 | 010 | AuthN/Z: self-issued RSA JWTs via Spring OAuth2 resource server | Accepted |
@@ -25,6 +25,8 @@ Full texts to be transcribed from the design log; statuses reflect the architect
 | 018 | Evidence-backed proficiency with a substitutable level-resolution policy | Accepted |
 | 019 | Cross-context reference integrity: competency identifiers unvalidated | Accepted |
 | 020 | Learner state relational; JSONB confined to dynamic model artefacts | Accepted |
+| 021 | Skill-gap model, severity semantics, and the explainability chain | Accepted |
+| 022 | Selective CQRS: project competency, query learner | Accepted |
 
 **ADR-010 realisation note (Step 3).** ADR-010 fixed authentication and authorisation as
 self-issued RSA JWTs validated by a Spring OAuth2 resource server. It is realised in Step 3 and
