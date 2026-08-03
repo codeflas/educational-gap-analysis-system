@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
  * expiry this service reports is precisely the expiry encoded in the token, never a hair later.
  */
 @Service
-class TokenService {
+public class TokenService {
 
     /**
      * A real BCrypt hash (of a value no principal can supply) used only to spend the same time
@@ -68,7 +68,7 @@ class TokenService {
      * @throws BadCredentialsException if the username is unknown or the password does not match —
      *         the same exception, with the same message, in both cases
      */
-    IssuedToken issue(String username, String rawPassword) {
+    public IssuedToken issue(String username, String rawPassword) {
         DevelopmentPrincipal principal = principalProperties.findByUsername(username).orElse(null);
         String expectedHash = principal == null ? DUMMY_HASH : principal.passwordHash();
 
@@ -116,10 +116,10 @@ class TokenService {
      * federation path ADR-013 anticipates — an external IdP replacing this endpoint while the
      * resource-server side stays unchanged — can be taken without touching the caller.
      */
-    record IssuedToken(String tokenValue, Instant issuedAt, Instant expiresAt) {
+    public record IssuedToken(String tokenValue, Instant issuedAt, Instant expiresAt) {
 
         /** Seconds until expiry, as the OAuth2 {@code expires_in} response field expects. */
-        long expiresInSeconds() {
+        public long expiresInSeconds() {
             return Math.max(0, expiresAt.getEpochSecond() - issuedAt.getEpochSecond());
         }
     }
