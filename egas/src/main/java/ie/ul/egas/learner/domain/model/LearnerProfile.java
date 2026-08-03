@@ -69,7 +69,29 @@ public final class LearnerProfile {
                 LearnerId.random(), authSubject, displayName, clock.instant(), List.of());
     }
 
-    /** Rehydrates a persisted profile. The store holds only profiles that were valid when written. */
+    /**
+     * Rehydrates a persisted profile, trusting the store.
+     *
+     * <p><b>Aggregate invariants are deliberately not re-checked here.</b> This method will accept
+     * two assertions for the same competency — a state {@link #recordEvidence} can never produce.
+     * That is a recorded decision, not an oversight, and it rests on two arguments. Re-validating
+     * on every load moves invariant checking onto the read path, where it is paid on every request
+     * to protect against a defect that can only be introduced on the write path. More decisively,
+     * a profile that fails validation on load becomes <em>unreadable</em>, and an unreadable record
+     * cannot be inspected or repaired — a historical data defect would escalate into an outage for
+     * that learner rather than a report against them.
+     *
+     * <p><b>What is still enforced.</b> Null arguments are rejected, and every component validates
+     * itself on construction: {@link AuthSubject}, {@link DisplayName} and {@link AttainedLevel}
+     * apply their own rules, and {@link ProficiencyAssertion} still refuses an empty evidence set.
+     * Rehydration cannot produce a structurally malformed object, only a semantically stale one.
+     *
+     * <p><b>Where the line is actually held.</b> The write path is the sole author of aggregate
+     * state, so {@link #recordEvidence} is the invariant's real guardian; from Phase 2 a unique
+     * constraint on (profile, competency) backs it in the database, as the class documentation
+     * states. The trust boundary is therefore the persistence adapter: its round-trip tests are
+     * what must demonstrate that what was written is what comes back.
+     */
     public static LearnerProfile reconstitute(LearnerId id, AuthSubject authSubject,
                                               DisplayName displayName, Instant createdAt,
                                               List<ProficiencyAssertion> assertions) {

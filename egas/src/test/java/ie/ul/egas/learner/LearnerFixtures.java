@@ -43,12 +43,18 @@ public final class LearnerFixtures {
     private LearnerFixtures() {
     }
 
+    /**
+     * Deliberately <em>not</em> {@code test-learner}: that name belongs to the security test
+     * principal roster in {@code src/test/resources/application.properties}. These suites have no
+     * relationship to it — the aggregate never sees a token — and an identical string would invite
+     * a later reader to treat the two as connected and change one to match the other.
+     */
     public static AuthSubject subject() {
-        return new AuthSubject("test-learner");
+        return new AuthSubject("fixture-learner");
     }
 
     public static AuthSubject otherSubject() {
-        return new AuthSubject("another-learner");
+        return new AuthSubject("fixture-other-learner");
     }
 
     public static LearnerProfile profile() {

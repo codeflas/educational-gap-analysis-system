@@ -1,0 +1,111 @@
+@startuml learner-module-internal
+' Ports-and-adapters inside the Learner Profiling module (Step 4 Phase 1 slice).
+' Domain ring only: no application services, adapters or controllers exist yet.
+skinparam componentStyle rectangle
+
+package "competency.api (named interface)" {
+  [CompetencyId]
+  [CompetencyFrameworkId]
+}
+
+package "learner.api (named interface)" {
+  [LearnerId]
+}
+
+package "domain" {
+  [LearnerProfile\n(aggregate root)] as AGG
+  [ProficiencyAssertion\n(entity, immutable state)] as PA
+  [EvidenceRecord\n(append-only)] as EV
+  [AttainedLevel\n(ordinal + framework code)] as LVL
+  [AuthSubject\n(JWT sub, opaque)] as SUBJ
+  [Confidence · DisplayName\nAssertionId · EvidenceType] as VO
+  [LearnerProfileSummary\n(read model)] as SUM
+  [LearnerProfileRepository\n(driven port)] as REPO
+  [ConflictingFramework ·\nDuplicateProfile · NotFound] as EXC
+}
+
+package "domain.policy" {
+  [LevelResolutionPolicy\n(domain service port)] as POL
+  [HighestConfidenceResolutionPolicy\n(default)] as HCP
+  [UnresolvableEvidenceException] as UEX
+}
+
+AGG --> LearnerId
+AGG --> SUBJ
+AGG --> PA
+AGG --> VO
+AGG --> POL
+AGG --> EXC
+PA --> EV
+PA --> LVL
+PA --> POL
+PA --> CompetencyId
+PA --> CompetencyFrameworkId
+EV --> LVL
+EV --> VO
+REPO --> AGG
+REPO --> SUM
+REPO --> SUBJ
+SUM --> LearnerId
+HCP .up.|> POL
+HCP --> UEX
+POL --> LVL
+
+note right of AGG
+  Invariants inside the boundary:
+  at most one assertion per competency
+  (recordEvidence extends or opens);
+  an assertion's framework is fixed
+  once opened — conflicting evidence
+  is rejected, not merged
+end note
+
+note bottom of PA
+  ADR-019: CompetencyId and CompetencyFrameworkId
+  are carried by value and never resolved — no query
+  port, no cross-schema FK, no runtime call into
+  Competency Modelling. The framework travels with
+  the assertion because a level code is meaningless
+  without it (ADR-018).
+end note
+
+note bottom of AGG
+  == PLANNED — NOT IMPLEMENTED IN PHASE 1 ==
+  Nothing below this line exists in code yet. It is recorded
+  here because ADR-015 Amendment 1 splits ownership
+  authorisation across two locations, and neither can be
+  understood without the other. No component box is drawn
+  for either: what Phase 1 ships is the aggregate predicate
+  LearnerProfile.isOwnedBy(AuthSubject), shown above.
+
+  (1) [Phase 4] SecurityConfig — ordered filter-chain rules
+        GET /api/learners     -> hasAnyRole(EDUCATOR, ADMIN)
+             /api/learners/** -> authenticated()
+  (2) [Phase 3] LearnerProfileService — ownership predicate
+        evaluated against the loaded aggregate, delegating
+        to isOwnedBy(AuthSubject)
+
+  Rationale (ADR-015 A1): the chain cannot see whose profile
+  is requested, so it admits on authentication alone and the
+  application layer decides. Denial is 404, not 403, so a
+  profile's existence is not disclosed.
+end note
+
+note right of POL
+  ADR-018: resolution is a substitutable port, not a method
+  on the aggregate. A lambda policy lets every aggregate
+  invariant be tested without resolution arithmetic — the
+  same seam ConformanceValidator gave CompetencyFramework.
+  The default orders by confidence, then recency, then
+  ordinal, then level code; the last tie-break is what makes
+  the order total and consistent with AttainedLevel.equals.
+end note
+
+note bottom of SUBJ
+  ADR-016: the caller's identity arrives as command data,
+  never from SecurityContextHolder. That is what allows the
+  ownership rule to be exercised with no security
+  infrastructure at all. The command that will carry it is a
+  Phase 3 component and is not drawn here.
+end note
+@enduml

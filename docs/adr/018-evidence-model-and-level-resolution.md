@@ -35,8 +35,18 @@ Option 4. `EvidenceRecord` is an immutable value object — type, claimed level,
 timestamp — appended to a `ProficiencyAssertion` and never modified. Resolution is
 `LevelResolutionPolicy`, a single-method domain port taking the evidence set for one competency
 and returning the `AttainedLevel`. The default `HighestConfidenceResolutionPolicy` selects the
-most confident claim, breaking ties by recency and then by the higher ordinal so the outcome is
-deterministic for any input.
+most confident claim, breaking ties by recency, then by the higher ordinal, and finally by level
+code, so the outcome is deterministic for any input.
+
+The last tie-break is what makes that guarantee true rather than approximate, and is recorded
+because it was initially missing. `AttainedLevel` orders by ordinal — the only comparison carrying
+proficiency meaning — but a record's `equals` also compares the framework-scoped code, so ordering
+by ordinal alone left `(2, "L2")` and `(2, "SFIA-2")` comparing as tied while being unequal. That
+breaks the `Comparable` contract's consistency recommendation, and it broke this policy concretely:
+evidence differing only in level code resolved according to the order it happened to be stored in.
+Ordering by ordinal then code closes both at once. Records that tie on all four criteria
+necessarily carry the same claimed level, so the resolved value is stable even though which record
+"wins" is unspecified — the answer is deterministic, not the selection.
 
 Evidence types are a closed enum — `SELF_DECLARED`, `ASSESSMENT`, `COURSE_COMPLETION`,
 `CERTIFICATION`, `OBSERVATION` — because an open string would let the resolution policy's input

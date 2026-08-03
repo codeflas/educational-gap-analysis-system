@@ -9,11 +9,16 @@ import java.util.List;
 /**
  * Default {@link LevelResolutionPolicy}: the most confident claim wins (ADR-018).
  *
- * <p>Ties are broken by recency, then by the higher ordinal. Both tie-breaks exist to make the
- * outcome <em>total</em> — without them, two equally confident claims recorded in the same instant
- * would resolve according to list order, and an assertion's level would depend on the sequence in
- * which its evidence happened to be persisted. Determinism is part of the port's contract, not an
- * incidental property of this implementation.
+ * <p>Ties are broken by recency, then by the higher ordinal, and finally by level code — the last
+ * of these supplied by {@link AttainedLevel}'s own ordering, which is total because it agrees with
+ * its {@code equals}. The tie-breaks exist to make the outcome <em>total</em>: without them, two
+ * equally confident claims recorded in the same instant would resolve according to list order, and
+ * an assertion's level would depend on the sequence in which its evidence happened to be persisted.
+ * Determinism is part of the port's contract, not an incidental property of this implementation.
+ *
+ * <p>Records that tie on all four criteria necessarily carry the <em>same</em> claimed level, so
+ * the resolved value is identical whichever of them is selected. That is what closes the contract:
+ * the winning record may be order-dependent, the answer never is.
  *
  * <p>Choosing confidence as the primary criterion rather than, say, the highest claimed level is a
  * substantive judgement: it means a hesitant claim of level 5 loses to a certain claim of level 3,

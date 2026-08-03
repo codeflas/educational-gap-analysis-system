@@ -8,6 +8,9 @@ import ie.ul.egas.learner.domain.model.EvidenceRecord;
 import ie.ul.egas.learner.domain.model.EvidenceType;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.TreeSet;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -18,7 +21,7 @@ class LearnerValueObjectTests {
     void authSubjectTrimsAndBoundsButNeverInterprets() {
         // Opaque by design (ADR-017): an email, a UUID and a username are all equally acceptable,
         // so a future identity source can change the content without changing this type.
-        assertThat(new AuthSubject("  test-learner  ").value()).isEqualTo("test-learner");
+        assertThat(new AuthSubject("  fixture-learner  ").value()).isEqualTo("fixture-learner");
         assertThat(new AuthSubject("a.user@ul.ie").value()).isEqualTo("a.user@ul.ie");
         assertThatThrownBy(() -> new AuthSubject("   ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AuthSubject("x".repeat(201)))
@@ -37,11 +40,33 @@ class LearnerValueObjectTests {
     void attainedLevelValidatesAndOrdersByOrdinal() {
         assertThat(new AttainedLevel(2, "  L2 ").code()).isEqualTo("L2");
         assertThat(new AttainedLevel(3, "L3")).isGreaterThan(new AttainedLevel(2, "L2"));
-        assertThat(new AttainedLevel(2, "L2")).isEqualByComparingTo(new AttainedLevel(2, "SFIA-2"));
         assertThatThrownBy(() -> new AttainedLevel(-1, "L1"))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new AttainedLevel(1, " "))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void attainedLevelComparesConsistentlyWithEquals() {
+        AttainedLevel l2 = new AttainedLevel(2, "L2");
+        AttainedLevel sfia2 = new AttainedLevel(2, "SFIA-2");
+
+        // Sharing an ordinal is not being the same level. Ordinal-only ordering would report these
+        // as tied while equals reports them different, which breaks Comparable's consistency
+        // recommendation and, concretely, lets a sorted collection collapse two distinct levels.
+        assertThat(l2).isNotEqualTo(sfia2);
+        assertThat(l2.compareTo(sfia2)).isNotZero();
+        assertThat(new TreeSet<>(List.of(l2, sfia2)))
+                .as("a sorted set must keep both levels, since they are not equal")
+                .hasSize(2);
+
+        // Equal values still compare equal, including after code normalisation.
+        assertThat(l2).isEqualByComparingTo(new AttainedLevel(2, "L2"));
+        assertThat(l2).isEqualByComparingTo(new AttainedLevel(2, "  L2  "));
+        assertThat(l2).isEqualTo(new AttainedLevel(2, "  L2  "));
+
+        // Ordinal still dominates: the tie-break only ever separates equal ordinals.
+        assertThat(new AttainedLevel(3, "A")).isGreaterThan(new AttainedLevel(2, "Z"));
     }
 
     @Test

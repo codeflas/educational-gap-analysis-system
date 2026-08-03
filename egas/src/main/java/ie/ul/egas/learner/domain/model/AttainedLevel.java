@@ -35,12 +35,29 @@ public record AttainedLevel(int ordinal, String code) implements Comparable<Atta
     }
 
     /**
-     * Orders by ordinal alone. Two levels from different frameworks are comparable only because
-     * the caller has established they belong to the same scale; the type cannot enforce that, and
-     * the owning assertion is what guarantees it in practice.
+     * Orders by ordinal — the only comparison that carries proficiency meaning — and then by code
+     * as a tie-break that carries none.
+     *
+     * <p><b>Why the second criterion exists.</b> Ordinal alone would make {@code (2, "L2")} and
+     * {@code (2, "SFIA-2")} compare as equal while {@link #equals} reports them different,
+     * breaking the {@link Comparable} contract's consistency recommendation. Two concrete failures
+     * follow from that, and both are prevented here rather than documented as caveats: a
+     * {@code TreeSet} or {@code TreeMap} would silently collapse the two distinct levels into one,
+     * and — the live case — {@code HighestConfidenceResolutionPolicy} chains this ordering as its
+     * final tie-break, so evidence differing only in level code would compare as tied and the
+     * resolved level would depend on the order the evidence happened to be stored in. ADR-018
+     * requires resolution to be deterministic for any input; that guarantee rests on this order
+     * being total over the value space, not merely over ordinals.
+     *
+     * <p>Lexicographic code ordering asserts nothing about proficiency: it is an arbitrary but
+     * stable choice, and the only property required of it is that it separates values {@code equals}
+     * separates. Two levels from different frameworks remain comparable only because the caller has
+     * established they belong to the same scale; the type cannot enforce that, and the owning
+     * {@link ProficiencyAssertion} is what guarantees it in practice.
      */
     @Override
     public int compareTo(AttainedLevel other) {
-        return Integer.compare(ordinal, other.ordinal);
+        int byOrdinal = Integer.compare(ordinal, other.ordinal);
+        return byOrdinal != 0 ? byOrdinal : code.compareTo(other.code);
     }
 }

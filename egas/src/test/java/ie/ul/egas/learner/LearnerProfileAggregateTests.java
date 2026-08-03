@@ -1,7 +1,11 @@
 package ie.ul.egas.learner;
 
+import ie.ul.egas.learner.domain.model.AssertionId;
+import ie.ul.egas.learner.domain.model.AttainedLevel;
+import ie.ul.egas.learner.domain.model.AuthSubject;
 import ie.ul.egas.learner.domain.model.ConflictingFrameworkException;
 import ie.ul.egas.learner.domain.model.DisplayName;
+import ie.ul.egas.learner.domain.model.EvidenceRecord;
 import ie.ul.egas.learner.domain.model.LearnerProfile;
 import ie.ul.egas.learner.domain.model.ProficiencyAssertion;
 import ie.ul.egas.learner.domain.policy.HighestConfidenceResolutionPolicy;
@@ -132,8 +136,7 @@ class LearnerProfileAggregateTests {
         assertThat(profile.isOwnedBy(LearnerFixtures.otherSubject())).isFalse();
         // Whitespace insensitivity matters: the subject arrives from a token claim, and a profile
         // must not become unreachable because of incidental padding.
-        assertThat(profile.isOwnedBy(new ie.ul.egas.learner.domain.model.AuthSubject("  test-learner  ")))
-                .isTrue();
+        assertThat(profile.isOwnedBy(new AuthSubject("  fixture-learner  "))).isTrue();
     }
 
     @Test
@@ -151,18 +154,90 @@ class LearnerProfileAggregateTests {
     }
 
     @Test
-    void equalityIsByIdentityAndSurvivesReconstitution() {
+    void equalityIsByIdentityAloneAndIgnoresState() {
         LearnerProfile profile = LearnerFixtures.profile();
         profile.recordEvidence(LearnerFixtures.SOFTWARE_DESIGN, LearnerFixtures.FRAMEWORK,
                 LearnerFixtures.evidence(LearnerFixtures.FOUNDATION, 0.5),
                 alwaysIntermediate, LearnerFixtures.FIXED_CLOCK);
 
+        // Entity semantics: same identifier, deliberately different state — still the same profile.
+        // Asserting this with divergent state is the point; comparing two identical copies would
+        // pass under value semantics too and prove nothing about which rule is in force.
+        LearnerProfile sameIdDifferentState = LearnerProfile.reconstitute(
+                profile.id(), LearnerFixtures.otherSubject(), new DisplayName("Renamed Person"),
+                LearnerFixtures.NOW.plusSeconds(86_400), List.of());
+
+        assertThat(sameIdDifferentState).isEqualTo(profile);
+        assertThat(sameIdDifferentState).hasSameHashCodeAs(profile);
+        assertThat(LearnerFixtures.profileFor("someone-else")).isNotEqualTo(profile);
+    }
+
+    @Test
+    void reconstitutionRestoresStateFaithfullyAndNotMerelyIdentity() {
+        LearnerProfile profile = LearnerFixtures.profile();
+        profile.recordEvidence(LearnerFixtures.SOFTWARE_DESIGN, LearnerFixtures.FRAMEWORK,
+                LearnerFixtures.evidence(LearnerFixtures.FOUNDATION, 0.4),
+                realPolicy, LearnerFixtures.FIXED_CLOCK);
+        profile.recordEvidence(LearnerFixtures.SOFTWARE_DESIGN, LearnerFixtures.FRAMEWORK,
+                LearnerFixtures.evidence(LearnerFixtures.ADVANCED, 0.9),
+                realPolicy, LearnerFixtures.FIXED_CLOCK);
+
         LearnerProfile rehydrated = LearnerProfile.reconstitute(
                 profile.id(), profile.authSubject(), profile.displayName(),
                 profile.createdAt(), profile.assertions());
 
-        assertThat(rehydrated).isEqualTo(profile);
-        assertThat(rehydrated.assertions()).isEqualTo(profile.assertions());
-        assertThat(LearnerFixtures.profileFor("someone-else")).isNotEqualTo(profile);
+        assertThat(rehydrated.authSubject()).isEqualTo(profile.authSubject());
+        assertThat(rehydrated.displayName()).isEqualTo(profile.displayName());
+        assertThat(rehydrated.createdAt()).isEqualTo(profile.createdAt());
+
+        // Field-by-field rather than isEqualTo: ProficiencyAssertion's equals is by identifier, so
+        // a plain list comparison passes even if every other field were lost in the round trip.
+        assertThat(rehydrated.assertions())
+                .usingRecursiveFieldByFieldElementComparator()
+                .isEqualTo(profile.assertions());
+
+        ProficiencyAssertion restored = rehydrated.assertions().get(0);
+        assertThat(restored.competencyId()).isEqualTo(LearnerFixtures.SOFTWARE_DESIGN);
+        assertThat(restored.frameworkId()).isEqualTo(LearnerFixtures.FRAMEWORK);
+        assertThat(restored.attainedLevel()).isEqualTo(LearnerFixtures.ADVANCED);
+        assertThat(restored.evidence()).hasSize(2);
+        assertThat(restored.resolvedAt()).isEqualTo(LearnerFixtures.NOW);
+    }
+
+    @Test
+    void reconstituteTrustsTheStoreAndDoesNotRevalidateAggregateInvariants() {
+        // Documents an intentional trust boundary rather than an oversight. Two assertions for one
+        // competency is a state recordEvidence can never produce, yet reconstitute admits it:
+        // re-validating on load would move invariant checking onto the read path and, worse, make a
+        // historical data defect unreadable — and an unreadable record cannot be repaired.
+        // recordEvidence is the invariant's guardian; from Phase 2 a unique constraint backs it.
+        ProficiencyAssertion first = assertionFor(LearnerFixtures.FOUNDATION);
+        ProficiencyAssertion duplicate = assertionFor(LearnerFixtures.ADVANCED);
+
+        LearnerProfile smuggled = LearnerProfile.reconstitute(
+                LearnerFixtures.profile().id(), LearnerFixtures.subject(),
+                new DisplayName("Smuggled State"), LearnerFixtures.NOW,
+                List.of(first, duplicate));
+
+        assertThat(smuggled.assertions())
+                .as("rehydration accepts what the store hands it, invariants included")
+                .hasSize(2);
+        // assertionFor returns the first match, so the aggregate stays usable rather than throwing.
+        assertThat(smuggled.assertionFor(LearnerFixtures.SOFTWARE_DESIGN)).contains(first);
+
+        // What rehydration still refuses: structurally malformed components.
+        assertThatThrownBy(() -> ProficiencyAssertion.reconstitute(
+                AssertionId.random(), LearnerFixtures.SOFTWARE_DESIGN, LearnerFixtures.FRAMEWORK,
+                LearnerFixtures.FOUNDATION, List.of(), LearnerFixtures.NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("at least one evidence record");
+    }
+
+    /** An assertion built through the rehydration path, for the trust-boundary test above. */
+    private ProficiencyAssertion assertionFor(AttainedLevel level) {
+        EvidenceRecord evidence = LearnerFixtures.evidence(level, 0.5);
+        return ProficiencyAssertion.reconstitute(
+                AssertionId.random(), LearnerFixtures.SOFTWARE_DESIGN, LearnerFixtures.FRAMEWORK,
+                level, List.of(evidence), LearnerFixtures.NOW);
     }
 }
