@@ -70,6 +70,41 @@ Modularity (+ no runtime coupling between contexts; + zero-touch preserved), ext
 (+ neither context calls the other), data integrity (− no referential validity for cross-context
 references), diagnosability (− invalid references surface late and indirectly).
 
+## Amendment 1 — competency identity is derived from (frameworkId, code) (Step 5, Accepted 2026-08-03)
+
+This ADR accepted that a `CompetencyId` held by another context is unvalidated. Step 5 planning
+found something sharper, which this ADR did not anticipate: **nothing ever minted one**.
+
+`CompetencyId` has been published in `competency.api` since Step 1 and is used nowhere inside the
+Competency Modelling module. The M2 metamodel identifies a competency by `code`, framework-wide
+unique, and declares no identifier attribute — so a UUID stored in a learner assertion corresponded
+to nothing any model could produce. The references were not merely unvalidated; they were
+*unmatchable*, and Gap Analysis could not have joined attainment to a model at all.
+
+**Decision.** A competency's identity is **derived deterministically from its framework and its
+code**: `CompetencyId = UUIDv3(frameworkId + ":" + competencyCode)`, computed via
+`UUID.nameUUIDFromBytes` over UTF-8 bytes. Competency Modelling computes it when compiling a model
+snapshot and exposes it in the framework detail response, so a client recording learner evidence
+obtains a real identifier instead of inventing one.
+
+Three properties make derivation the right answer here. It needs **no M2 change**, leaving the
+ADR-003 metamodel freeze intact. It is **stable**: the same framework and code always yield the same
+id, so re-registering or re-projecting a model does not re-key anything referring to it. And it is
+**computable on both sides**, which is what a join key across a context boundary has to be when
+neither side may read the other's tables. The technique is the same one Step 4 used for evidence row
+ids, and for the same reason: identity derived from position in a stable structure, where no natural
+key exists to store.
+
+Codes are unique framework-wide by the metamodel's own well-formedness rules, so the derivation
+cannot collide within a framework; including the framework id keeps two frameworks that reuse a code
+apart.
+
+**What this does not change.** References remain unvalidated at write time, exactly as decided above:
+a learner may still hold an id for a competency that no registered model contains, and Gap Analysis
+still reports that as absence rather than rejecting it. The amendment makes references *matchable*,
+not *verified* — the projection-based validation described below remains the mechanism for the
+latter.
+
 ## Future evolution
 When the Gap Analysis projection lands (W6, ADR-007), reference validation becomes a report over
 existing data — assertions whose competency is absent from the published model — and can be

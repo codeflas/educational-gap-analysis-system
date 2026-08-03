@@ -50,11 +50,35 @@ public record CompetencyModelSnapshot(
 
     public record Level(String code, String name, int ordinal) { }
 
-    // requiredLevelCode may be null: not every competency states a target level.
+    // definedLevelCodes: the levels for which this competency has a descriptor — what the model
+    // makes available, not what it demands. Identity is derived (ADR-019 Amendment 1).
     public record Competency(CompetencyId id, String code, String name,
-                             String areaCode, String requiredLevelCode) { }
+                             String areaCode, List<String> definedLevelCodes) { }
 }
 ```
+
+> **Correction C1 (3 Aug 2026, Phase 1 planning).** This record originally carried a
+> `requiredLevelCode` field. **It was removed: no such value exists and none can be derived.** The
+> M2 metamodel (ADR-003) has no requirement concept — a `LevelDescriptor` states what a proficiency
+> level *means* for a competency, never what level is demanded — so the field was an invention of
+> the plan rather than a property of the model, and building against it would have produced a
+> contract the producer could not honestly fill.
+>
+> **The governing principle, now recorded in ADR-021: gap analysis compares attainment against an
+> *analysis target*, not against an intrinsic competency requirement.** The model supplies the
+> available levels; `AnalyseGapCommand` supplies the target, defaulting to the highest level for
+> which a competency has a descriptor when the request omits one. Each stored gap records the target
+> it was measured against, because the same attainment yields a different gap under a different
+> target.
+>
+> A second correction of the same kind: `CompetencyId` is **derived** from
+> `(frameworkId, competencyCode)` per ADR-019 Amendment 1. Planning found that nothing in the system
+> ever minted one — the metamodel identifies competencies by code alone — so learner references were
+> not merely unvalidated but unmatchable, and gap computation could not have joined anything. The
+> derived id is also exposed in `FrameworkDetailResponse.CompetencyResponse`, an additive REST field
+> so that clients obtain real identifiers instead of inventing them. Adding a component to that
+> response record is not a published-module-API signature change; the zero-breaking-signature
+> criterion applies to `competency.api`, which gains only new types.
 
 Three constraints shaped this. **No `EObject` crosses the boundary** — ADR-012 confines EMF to
 Competency Modelling, so compilation happens *inside* that module, traversing the M1 graph through

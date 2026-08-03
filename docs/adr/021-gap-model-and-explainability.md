@@ -22,7 +22,7 @@ what must be retained so an explanation can be produced without re-deriving it.
 2. **Gap as a stored number.** Reproducible and addressable, but it records the conclusion without
    the premises: a report can be shown but not defended, and RQ3's explainability claim rests on
    prose rather than data.
-3. **Gap as a stored, self-contained finding** — requirement snapshot, attainment snapshot,
+3. **Gap as a stored, self-contained finding** — analysis-target snapshot, attainment snapshot,
    evidence provenance, computed severity, and the references and instant that produced it
    (chosen).
 
@@ -31,10 +31,24 @@ Option 3. `GapReport` is a stored aggregate, and it is **self-contained by desig
 needed to explain a finding is captured at computation time rather than recovered afterwards.
 
 A report holds the learner reference, the target framework reference, the instant it was generated,
-and its gaps. Each `SkillGap` carries the **requirement snapshot** (the competency and the
-proficiency level the target model demands), the **attainment snapshot** (the level the learner was
-held to have reached, or its absence), the **evidence provenance** behind that attainment, and the
-computed **severity**.
+and its gaps. Each `SkillGap` carries the **analysis-target snapshot** (the competency and the
+proficiency level *this analysis was run against*), the **attainment snapshot** (the level the
+learner was held to have reached, or its absence), the **evidence provenance** behind that
+attainment, and the computed **severity**.
+
+**Gap analysis compares attainment against an analysis target, not against an intrinsic competency
+requirement.** This is a correction of terminology and of fact, and it matters. The M2 metamodel
+(ADR-003) has no notion of a required level: a `LevelDescriptor` states what a proficiency level
+*means* for a competency, never what level is demanded of anyone. Nothing in a competency model
+says a learner ought to reach L3. The model supplies the **available** levels; the target is
+supplied by the analysis request, because "what should this person reach" is a question about a
+role, a curriculum or an intention — not a property of the framework. When a request omits a
+target, the highest level for which the competency has a descriptor is used, which is a stated
+default rather than a discovered requirement.
+
+Recording the target in each gap is therefore not redundancy but the difference between a defensible
+finding and a floating number: a stored report must say what it was measured against, since the same
+attainment yields a different gap under a different target.
 
 Snapshots are copies, not references. That is the point of the decision: a report computed in March
 must still be explicable in June after the framework has been revised and further evidence
@@ -57,15 +71,15 @@ required competency is materially different from one assessed at the lowest leve
 the two would hide the distinction most useful to a recommendation. The model represents absence
 explicitly and lets the severity policy decide what it is worth.
 
-**The explainability chain is the retained structure**: requirement → attainment → the evidence
+**The explainability chain is the retained structure**: analysis target → attainment → the evidence
 records that produced it, each already carrying type, claimed level, confidence, source and
 timestamp under ADR-018. Because learner evidence is append-only, the provenance a report captures
 is a faithful record of what supported the claim at that instant. RQ3's claim is discharged by this
 chain being present in the data, not by a narration layer above it.
 
 ## Consequences
-A gap report can be defended, not merely displayed: every number in it is accompanied by the
-requirement it was measured against and the observations that supported it. Recommendation can
+A gap report can be defended, not merely displayed: every number in it is accompanied by the target
+it was measured against and the observations that supported it. Recommendation can
 synthesise pathways from gaps without reaching back into Learner Profiling or Competency Modelling,
 because a report is complete on its own — which keeps the module DAG acyclic and the contexts
 independently extractable. Historical analysis becomes possible at all, since reports do not
