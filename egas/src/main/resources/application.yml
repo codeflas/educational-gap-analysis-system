@@ -40,6 +40,23 @@ spring:
 
 egas:
   security:
+    jwt:
+      issuer: ${EGAS_SECURITY_JWT_ISSUER:egas}
+      ttl: ${EGAS_SECURITY_JWT_TTL:PT1H}
+      # Key locations are deliberately absent here — key material is environment-injected and
+      # never committed (ADR-013, amendment A5):
+      #   EGAS_SECURITY_JWT_PRIVATE_KEY_LOCATION=file:/run/secrets/jwt-private.pem   (PKCS#8)
+      #   EGAS_SECURITY_JWT_PUBLIC_KEY_LOCATION=file:/run/secrets/jwt-public.pem     (X.509 SPKI)
+      #
+      # Absent + dev profile  -> an in-memory RSA-2048 pair is generated and loudly logged;
+      #                          tokens do not survive a restart. `mvn spring-boot:run` activates
+      #                          the dev profile (see spring-boot-maven-plugin in pom.xml).
+      # Absent + any other    -> startup ABORTS rather than silently self-signing. This is the
+      #                          intended behaviour of `java -jar` without configuration, not a
+      #                          gap: a silently self-signing instance would mask precisely the
+      #                          misconfiguration that matters most.
+      # Exactly one of the two -> rejected in every profile; half-configuration is operator error.
+
     # DEVELOPMENT PRINCIPALS ONLY (ADR-013). Identity persistence — accounts, registration,
     # credential storage — is intentionally outside Step 3 scope; these entries are a
     # development-time construct, not a user store.

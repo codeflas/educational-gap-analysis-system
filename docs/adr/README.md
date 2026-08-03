@@ -18,3 +18,13 @@ Full texts to be transcribed from the design log; statuses reflect the architect
 | 011 | Persistence isolation: schema-per-module + migration ranges | Accepted |
 | 012 | EMF confined to Competency Modelling as its domain formalism | Accepted |
 | 013 | Token issuance: config-backed dev principals, fail-fast RSA keys | Accepted |
+| 014 | Platform web-adapter convention (`platform.infrastructure.web`) | Accepted |
+| 015 | Authorisation: centralised URL-pattern rules in one filter chain | Accepted |
+
+**ADR-010 realisation note (Step 3).** ADR-010 fixed authentication and authorisation as
+self-issued RSA JWTs validated by a Spring OAuth2 resource server. It is realised in Step 3 and
+elaborated by three records that leave its decision intact: ADR-013 (how tokens are issued, where
+principals come from, key policy and claim shape), ADR-014 (where the issuing controller lives),
+and ADR-015 (where authorisation is expressed). Rows 001–010 above are index entries whose full
+texts are transcribed from the design log; this note records the realisation without altering the
+original decision.

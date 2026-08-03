@@ -1,0 +1,85 @@
+@startuml security-view
+' Step 3 security capability as implemented (ADR-010, ADR-013, ADR-014, ADR-015).
+' Left to right: token issuance, then token validation on every business request.
+skinparam componentStyle rectangle
+
+actor Client
+
+package "platform.infrastructure.web (ADR-014)" {
+  [AuthTokenController\nPOST /auth/token] as CTRL
+  [TokenRequest / TokenResponse\naccess_token, token_type, expires_in] as DTO
+  [AuthExceptionHandler\n401, constant body] as AEH
+}
+
+package "platform.security" {
+  [SecurityConfig\nsingle SecurityFilterChain] as CHAIN
+  [JwtAuthenticationConverter\nroles claim -> ROLE_*] as CONV
+  [TokenService\nverify credentials + mint claims] as SVC
+  [PrincipalConfiguration\nBCryptPasswordEncoder] as PCFG
+  [PrincipalProperties\ndev principals: user, hash, roles] as PROPS
+  [Role\nEDUCATOR | LEARNER | ADMIN] as ROLE
+  [JwtConfiguration] as JCFG
+  [JwtEncoder\nNimbus, RS256] as ENC
+  [JwtDecoder\nRS256 + issuer + expiry] as DEC
+  [JwtKeyMaterial\nPEM pair, or dev-only generated] as KEYS
+  [JwtProperties\nissuer, ttl, key locations] as JPROPS
+}
+
+package "competency.infrastructure.web" {
+  [CompetencyFrameworkController\n/api/frameworks/**] as API
+}
+
+[Clock\nplatform.config] as CLOCK
+
+' --- Issuance path ---
+Client --> CTRL : 1. username + password
+CTRL --> DTO
+CTRL --> SVC : 2. issue(username, password)
+SVC --> PROPS : 3. look up principal
+SVC --> PCFG : 4. BCrypt matches()\n(runs for unknown users too)
+PROPS --> ROLE
+SVC --> CLOCK : 5. iat / exp
+SVC --> ENC : 6. sign RS256
+CTRL --> AEH : bad credentials -> 401
+SVC ..> AEH : BadCredentialsException
+
+' --- Validation path ---
+Client --> CHAIN : 7. Bearer <token>
+CHAIN --> DEC : 8. verify signature, exp, iss
+CHAIN --> CONV : 9. roles -> ROLE_*
+CHAIN --> API : 10. authorised request
+CHAIN ..> Client : 401 + WWW-Authenticate: Bearer\n403 on insufficient role
+
+' --- Key material ---
+JCFG --> KEYS
+JCFG --> JPROPS
+KEYS --> ENC
+KEYS --> DEC
+JPROPS --> DEC : issuer to validate
+JPROPS --> SVC : issuer, ttl
+
+note bottom of CHAIN
+  Ordered rules, deny-by-default terminal (ADR-015):
+  1 /actuator/health/**, /actuator/info      permitAll
+  2 /v3/api-docs/**, /swagger-ui/**          permitAll
+  3 POST /auth/token                         permitAll  <- only new permit
+  4 GET  /api/frameworks/**                  authenticated
+  5 other verbs /api/frameworks/**           hasAnyRole(EDUCATOR, ADMIN)
+  6 anyRequest()                             authenticated
+end note
+
+note right of KEYS
+  ADR-013 / A5 fail-fast:
+  PEM pair configured -> parse + modulus check
+  exactly one half      -> abort (any profile)
+  neither, dev profile  -> generate, log loudly
+  neither, otherwise    -> abort startup
+end note
+
+note right of SVC
+  Anti-enumeration: unknown username is
+  compared against a constant BCrypt hash,
+  so both failure paths cost the same and
+  return an identical 401 body.
+end note
+@enduml

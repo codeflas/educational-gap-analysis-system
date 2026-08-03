@@ -202,6 +202,16 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- `mvn spring-boot:run` is the local development entry point, so it activates the
+               dev profile, which is the only profile permitting the generated in-memory JWT
+               keypair (ADR-013, amendment A5). This affects the Maven goal ONLY: the packaged
+               jar carries no default profile, so `java -jar` outside dev still aborts at startup
+               unless real key material is injected. Fail-fast is preserved where it matters. -->
+          <profiles>
+            <profile>dev</profile>
+          </profiles>
+        </configuration>
       </plugin>
     </plugins>
   </build>

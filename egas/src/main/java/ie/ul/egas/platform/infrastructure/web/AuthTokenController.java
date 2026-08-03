@@ -6,6 +6,7 @@ import ie.ul.egas.platform.security.TokenService;
 import ie.ul.egas.platform.security.TokenService.IssuedToken;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,6 +49,10 @@ class AuthTokenController {
     @ApiResponse(responseCode = "200", description = "Token issued")
     @ApiResponse(responseCode = "400", description = "Malformed request payload")
     @ApiResponse(responseCode = "401", description = "Invalid credentials")
+    // Empty on purpose: overrides the document-wide bearer requirement. Demanding a token from
+    // the endpoint that issues them would be circular, and Swagger UI would refuse to call it
+    // before the user has one.
+    @SecurityRequirements
     TokenResponse token(@Valid @RequestBody TokenRequest request) {
         IssuedToken issued = tokenService.issue(request.username(), request.password());
         return TokenResponse.bearer(issued.tokenValue(), issued.expiresInSeconds());
