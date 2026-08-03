@@ -12,6 +12,7 @@ import org.springframework.core.env.Profiles;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
@@ -52,20 +53,18 @@ class JwtConfiguration {
     }
 
     /**
-     * Signature and timestamp validation only, for now: {@code withPublicKey} installs Spring's
-     * default validators (expiry/not-before and token type), which do not inspect {@code iss}.
-     *
-     * <p><b>Extension point (Step 3 resource-server phase, ADR-013):</b> when {@code SecurityConfig}
-     * gains {@code oauth2ResourceServer(jwt)}, this decoder must also validate the issuer against
-     * {@link JwtProperties#issuer()} — via {@code JwtValidators.createDefaultWithIssuer(...)} or an
-     * explicit {@code OAuth2TokenValidator} — otherwise a token bearing a foreign {@code iss} but
-     * signed with this instance's key would still be accepted. Deferred deliberately: nothing mints
-     * tokens until the {@code TokenService} phase, so there is no issuer to enforce yet.
+     * Validates signature, timestamps, and issuer. The default validator set that
+     * {@code withPublicKey} installs does not inspect {@code iss}, so it is replaced here: a token
+     * bearing a foreign issuer but signed with this instance's key would otherwise be accepted,
+     * and the issuer is the only claim distinguishing "minted by us" from "minted by something
+     * else holding this key". Realises the extension point recorded when this bean was introduced.
      */
     @Bean
-    JwtDecoder jwtDecoder(JwtKeyMaterial keyMaterial) {
-        return NimbusJwtDecoder.withPublicKey(keyMaterial.publicKey())
+    JwtDecoder jwtDecoder(JwtKeyMaterial keyMaterial, JwtProperties properties) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(keyMaterial.publicKey())
                 .signatureAlgorithm(SignatureAlgorithm.RS256)
                 .build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
+        return decoder;
     }
 }

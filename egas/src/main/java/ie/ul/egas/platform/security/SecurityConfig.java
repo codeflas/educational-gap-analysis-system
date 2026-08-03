@@ -2,55 +2,107 @@ package ie.ul.egas.platform.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
+import org.springframework.security.oauth2.server.resource.web.access.BearerTokenAccessDeniedHandler;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
 /**
- * Baseline security posture: deny-by-default from the first commit (secure-by-design, ADR-010).
+ * The single security choke point: one filter chain, one ordered rule set, deny-by-default
+ * preserved as its terminal rule (ADR-010, ADR-015).
  *
  * <p>Decisions recorded here rather than left implicit:
  * <ul>
- *   <li><b>CSRF disabled</b> — this is a stateless bearer-token API; no session cookie means no
- *       CSRF vector. The decision MUST be revisited if cookie-based state is ever introduced.</li>
- *   <li><b>Stateless sessions</b> — horizontal scalability requires no server-side session
- *       affinity; this is a precondition for the load-test evaluation scenario.</li>
- *   <li><b>Explicit 401 entry point</b> — with form login and HTTP Basic disabled, Spring
- *       Security would otherwise fall back to a 403 for unauthenticated requests, mislabelling
- *       an authentication failure as an authorisation failure.</li>
- *   <li><b>Health/info probes anonymous</b> — required by container orchestration and the
- *       CI smoke tests; expose nothing sensitive.</li>
+ *   <li><b>Centralised URL-pattern authorisation (ADR-015)</b> — rather than {@code @PreAuthorize}
+ *       scattered across controllers or a filter chain per module. Authorisation stays auditable
+ *       in one place, and no security semantics leak into domain or application code. Step 4's
+ *       learner-profile <em>ownership</em> checks need principal identity at the application
+ *       level; ADR-015 records that as this rule set's designated extension point.</li>
+ *   <li><b>CSRF disabled</b> — a pure bearer-token API holds no cookie state, so there is no CSRF
+ *       vector. The rationale is stronger now than at Step 1, but the revisit trigger is
+ *       unchanged: reintroducing cookie-based state reopens this decision.</li>
+ *   <li><b>Stateless sessions</b> — no server-side session affinity, the scalability precondition
+ *       ADR-010 promised and the load-test scenario depends on.</li>
+ *   <li><b>Bearer entry point and access-denied handler</b> — an absent, malformed, or expired
+ *       token yields 401 with a {@code WWW-Authenticate: Bearer} challenge (RFC 6750); a valid
+ *       token lacking the required role yields 403. Conflating the two is the classic
+ *       resource-server defect, so each gets its own handler and its own tests.</li>
+ *   <li><b>Health/info and API docs anonymous</b> — unchanged from Step 1; documentation is not a
+ *       protected asset in this single-tenant prototype, and every business endpoint stays
+ *       authenticated.</li>
  * </ul>
- *
- * <p>Extension point (Step 3, ADR-010): replace the entry point with a bearer-token variant and
- * add {@code oauth2ResourceServer(jwt)} with a locally issued RSA-signed JWT. The deny-by-default
- * rule below is intentionally never relaxed.
  */
 @Configuration
 @EnableWebSecurity
 class SecurityConfig {
 
+    /**
+     * The claim minted by {@code TokenService}. Named here and nowhere else so the
+     * claim-to-authority contract has exactly one definition site.
+     */
+    private static final String ROLES_CLAIM = "roles";
+
+    /**
+     * Spring Security's convention: {@code hasRole("EDUCATOR")} tests for the authority
+     * {@code ROLE_EDUCATOR}. The prefix is applied here, at the one mapping site, and the
+     * {@code roles} claim therefore travels <em>without</em> it — a mismatch between these two
+     * halves produces silent 403s, which is why both are stated explicitly rather than relying
+     * on defaults.
+     */
+    private static final String ROLE_PREFIX = "ROLE_";
+
     @Bean
-    SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain apiFilterChain(HttpSecurity http, JwtAuthenticationConverter converter)
+            throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                        .authenticationEntryPoint(new BearerTokenAuthenticationEntryPoint())
+                        .accessDeniedHandler(new BearerTokenAccessDeniedHandler()))
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
                         // API *documentation* is not a protected asset in this single-tenant
                         // academic prototype; every business endpoint stays authenticated.
                         // Production profile may disable springdoc entirely (springdoc.api-docs.enabled=false).
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // The only new permit of Step 3: without it the endpoint that issues
+                        // tokens would itself demand one.
+                        .requestMatchers(HttpMethod.POST, "/auth/token").permitAll()
+                        // Reading the registry is open to any authenticated principal; changing
+                        // it is not. GET is matched first so the role rule below covers exactly
+                        // the mutating verbs.
+                        .requestMatchers(HttpMethod.GET, "/api/frameworks/**").authenticated()
+                        .requestMatchers("/api/frameworks/**").hasAnyRole(
+                                Role.EDUCATOR.name(), Role.ADMIN.name())
                         .anyRequest().authenticated())
                 .build();
+    }
+
+    /**
+     * Maps the {@code roles} claim onto Spring authorities. The default converter would read
+     * {@code scope}/{@code scp} and prefix {@code SCOPE_}; ADR-013 issues roles rather than OAuth
+     * scopes, so both the claim name and the prefix are set explicitly.
+     */
+    @Bean
+    JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter authorities = new JwtGrantedAuthoritiesConverter();
+        authorities.setAuthoritiesClaimName(ROLES_CLAIM);
+        authorities.setAuthorityPrefix(ROLE_PREFIX);
+
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
     }
 }

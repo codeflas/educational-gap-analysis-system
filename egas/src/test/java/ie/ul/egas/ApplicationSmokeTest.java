@@ -9,7 +9,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -38,7 +40,11 @@ class ApplicationSmokeTest {
 
     @Test
     void deniesUnauthenticatedRequestsByDefault() throws Exception {
-        mvc.perform(get("/api/does-not-exist")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/does-not-exist"))
+                .andExpect(status().isUnauthorized())
+                // RFC 6750: a 401 must tell the client how to authenticate, not merely that it
+                // failed. The Step-1 entry point returned a bare status; the bearer one does not.
+                .andExpect(header().string("WWW-Authenticate", startsWith("Bearer")));
     }
 
     @Test

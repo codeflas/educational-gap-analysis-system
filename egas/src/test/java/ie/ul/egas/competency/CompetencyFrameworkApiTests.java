@@ -8,13 +8,15 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -27,6 +29,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * extension, and the security posture. Tests authenticate via spring-security-test rather than
  * weakening deny-by-default; each test uses a unique framework name (shared context, no
  * per-test rollback across HTTP calls by design).
+ *
+ * <p>Authentication is a {@code jwt()} post-processor carrying the EDUCATOR authority, matching
+ * the bearer semantics the resource server now enforces. It deliberately does <em>not</em> call
+ * the issuance endpoint: these tests assert the registry's contract, and coupling them to token
+ * minting would make an unrelated failure there look like a regression here. That the real
+ * {@code roles} claim maps to this authority is proven separately, against real tokens, in
+ * {@code SecurityAuthorizationTests}.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -39,12 +48,17 @@ class CompetencyFrameworkApiTests {
     @Autowired
     ObjectMapper objectMapper;
 
+    /** A bearer token whose roles claim has already been mapped to the EDUCATOR authority. */
+    private static RequestPostProcessor educator() {
+        return jwt().authorities(new SimpleGrantedAuthority("ROLE_EDUCATOR"));
+    }
+
     @Test
     void registersAConformingFrameworkWithCreatedStatusAndLocation() throws Exception {
         var request = FrameworkFixtures.validRequest("API Register Framework", "1.0");
 
         mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -58,14 +72,14 @@ class CompetencyFrameworkApiTests {
     void returnsTheFullModelTreeOnDetail() throws Exception {
         var request = FrameworkFixtures.validRequest("API Detail Framework", "1.0");
         String body = mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         String id = objectMapper.readTree(body).get("id").asText();
 
-        mvc.perform(get("/api/frameworks/{id}", id).with(user("educator")))
+        mvc.perform(get("/api/frameworks/{id}", id).with(educator()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.levels.length()").value(2))
                 .andExpect(jsonPath("$.areas[0].code").value("DES"))
@@ -78,12 +92,12 @@ class CompetencyFrameworkApiTests {
     void listsRegisteredFrameworks() throws Exception {
         var request = FrameworkFixtures.validRequest("API List Framework", "1.0");
         mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        mvc.perform(get("/api/frameworks").with(user("educator")))
+        mvc.perform(get("/api/frameworks").with(educator()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].name", hasItem("API List Framework")));
     }
@@ -93,7 +107,7 @@ class CompetencyFrameworkApiTests {
         var request = FrameworkFixtures.requestWithPrerequisiteCycle("API Cyclic Framework");
 
         mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnprocessableEntity())
@@ -105,13 +119,13 @@ class CompetencyFrameworkApiTests {
     void rejectsDuplicateNameAndVersionWithConflict() throws Exception {
         var request = FrameworkFixtures.validRequest("API Duplicate Framework", "1.0");
         mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
         mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict());
@@ -119,7 +133,7 @@ class CompetencyFrameworkApiTests {
 
     @Test
     void returnsNotFoundForUnknownIds() throws Exception {
-        mvc.perform(get("/api/frameworks/{id}", UUID.randomUUID()).with(user("educator")))
+        mvc.perform(get("/api/frameworks/{id}", UUID.randomUUID()).with(educator()))
                 .andExpect(status().isNotFound());
     }
 
@@ -128,7 +142,7 @@ class CompetencyFrameworkApiTests {
         var request = FrameworkFixtures.validRequest("   ", "1.0"); // blank name: transport tier
 
         mvc.perform(post("/api/frameworks")
-                        .with(user("educator"))
+                        .with(educator())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
