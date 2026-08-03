@@ -86,6 +86,16 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/frameworks/**").authenticated()
                         .requestMatchers("/api/frameworks/**").hasAnyRole(
                                 Role.EDUCATOR.name(), Role.ADMIN.name())
+                        // Learner profiles (ADR-015 Amendment 1). Listing every profile is a
+                        // coarse, role-shaped question and stays here. Everything else under
+                        // /api/learners/** is admitted on authentication alone, because the chain
+                        // cannot see whose profile is being requested — ownership is decided in
+                        // LearnerProfileService against the loaded aggregate. Order is
+                        // semantically significant: /api/learners/** also matches /api/learners,
+                        // so the list rule must precede it.
+                        .requestMatchers(HttpMethod.GET, "/api/learners").hasAnyRole(
+                                Role.EDUCATOR.name(), Role.ADMIN.name())
+                        .requestMatchers("/api/learners/**").authenticated()
                         .anyRequest().authenticated())
                 .build();
     }

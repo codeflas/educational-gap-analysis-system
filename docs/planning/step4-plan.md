@@ -321,11 +321,21 @@ it as a separate argument supplied by the controller from the token. This is enf
 
 | Verb | Path | Access | Semantics |
 |---|---|---|---|
-| `POST` | `/api/learners/me` | LEARNER (self) | Creates the caller's own profile; subject from token. `409` if one exists. |
+| `POST` | `/api/learners/me` | any authenticated (A2) | Creates the caller's own profile; subject from token. `409` if one exists. |
 | `GET` | `/api/learners/me` | any authenticated | The caller's own profile with assertions; `404` if none. |
-| `POST` | `/api/learners/me/evidence` | LEARNER (self) | Records evidence, re-resolves the affected assertion, returns the updated profile. |
+| `POST` | `/api/learners/me/evidence` | any authenticated (A2) | Records evidence on the caller's own profile, re-resolves the affected assertion, returns the updated profile. |
 | `GET` | `/api/learners/{id}` | owner, or EDUCATOR/ADMIN | Ownership evaluated in the application layer. |
 | `GET` | `/api/learners` | EDUCATOR/ADMIN | Summaries only; assertion graphs never loaded. |
+
+**Amendment A2 (3 Aug 2026, before Phase 4 implementation).** The `/me` rows above originally read
+"LEARNER (self)". That conflicted with ADR-015 Amendment 1, whose rule set contains only two
+entries — `GET /api/learners` restricted to EDUCATOR/ADMIN, and everything else under
+`/api/learners/**` merely `authenticated()`. The Accepted ADR governs: **any authenticated principal
+may create and populate their own profile**, because an educator is also a person who may hold one,
+and a role restriction here would require a third chain rule the ADR does not contain — amending an
+Accepted decision to match a plan rather than the reverse. Ownership remains enforced by
+`LearnerProfileService` against the loaded aggregate, not by role; role restrictions apply only to
+the educator/admin operation `GET /api/learners`. No ADR is changed by this amendment.
 
 **Provisioning is explicit, not implicit.** Auto-creating a profile on first `GET /me` would
 perform a write on a read — surprising, and untestable as an idempotent GET. `POST /api/learners/me`
