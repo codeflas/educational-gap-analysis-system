@@ -38,6 +38,31 @@ spring:
     compose:
       lifecycle-management: start_only   # local dev convenience; keep DB running across restarts
 
+egas:
+  security:
+    # DEVELOPMENT PRINCIPALS ONLY (ADR-013). Identity persistence — accounts, registration,
+    # credential storage — is intentionally outside Step 3 scope; these entries are a
+    # development-time construct, not a user store.
+    #
+    # Passwords are BCrypt-hashed below and are deliberately non-secret, matching the username:
+    #   dev-educator / dev-educator-password
+    #   dev-learner  / dev-learner-password
+    #   dev-admin    / dev-admin-password
+    #
+    # Any real deployment MUST override this list via the environment
+    # (EGAS_SECURITY_PRINCIPALS_0_USERNAME, ..._PASSWORD_HASH, ..._ROLES) or replace the
+    # mechanism outright. Never add a production credential — hashed or otherwise — to this file.
+    principals:
+      - username: dev-educator
+        password-hash: "$2a$10$ZFQB0PhlYmITvFQK5Dt24uD5s2/c1IS2IVFp6ssAFkQRYt9D8GJ/S"
+        roles: [EDUCATOR]
+      - username: dev-learner
+        password-hash: "$2a$10$bcmaCVDKn82vBcSbajAWveDMEz9wWn/u8EvmE5Ak6Lb96aZGwdOj6"
+        roles: [LEARNER]
+      - username: dev-admin
+        password-hash: "$2a$10$vwCztp4bU4EV.ZNi8cYfhO/xJQRnVi.qQvAUnUmfyFtJ8u7U5Yafa"
+        roles: [ADMIN]
+
 management:
   endpoints:
     web:
