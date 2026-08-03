@@ -1,0 +1,55 @@
+@startuml competency-metamodel-v1
+' EGAS competency metamodel v1 (M2). Dynamic Ecore until the W3 freeze (ADR-003).
+' nsURI: http://egas.ul.ie/metamodel/competency/1.0
+hide empty methods
+skinparam classAttributeIconSize 0
+
+enum FrameworkSourceKind {
+  BESPOKE
+  SFIA
+  ESCO
+  OTHER
+}
+
+class CompetencyFramework {
+  name : EString [1]
+  version : EString [1]
+  description : EString [0..1]
+  source : FrameworkSourceKind [1]
+}
+
+class ProficiencyLevel {
+  code : EString [1]
+  name : EString [0..1]
+  ordinal : EInt [1]
+}
+
+class CompetencyArea {
+  code : EString [1]
+  name : EString [1]
+  description : EString [0..1]
+}
+
+class Competency {
+  code : EString [1]
+  name : EString [1]
+  description : EString [0..1]
+}
+
+class LevelDescriptor {
+  descriptor : EString [0..1]
+}
+
+CompetencyFramework "1" *-- "0..*" ProficiencyLevel : levels
+CompetencyFramework "1" *-- "1..*" CompetencyArea : areas
+CompetencyArea "1" *-- "1..*" Competency : competencies
+Competency "1" *-- "0..*" LevelDescriptor : levelDescriptors
+Competency "0..*" --> "0..*" Competency : prerequisites
+LevelDescriptor "0..*" --> "1" ProficiencyLevel : level
+
+note bottom of Competency
+  Well-formedness beyond Ecore (bespoke validators, OCL stand-in):
+  framework-wide unique codes; prerequisites resolve within the
+  framework, no self-reference, acyclic (DAG for gap/pathway analysis)
+end note
+@enduml

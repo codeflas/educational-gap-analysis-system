@@ -1,0 +1,57 @@
+@startuml competency-module-internal
+' Ports-and-adapters inside the Competency Modelling module (Step 2 slice)
+skinparam componentStyle rectangle
+
+package "competency.api (named interface)" {
+  [CompetencyFrameworkId]
+  [CompetencyId]
+}
+
+package "domain" {
+  [CompetencyFramework\n(aggregate)] as AGG
+  [FrameworkDescriptor + VOs] as VO
+  [CompetencyMetamodel\n(M2 facade)] as MM
+  [ConformanceValidator\n(domain service port)] as CV
+  [EmfConformanceValidator] as ECV
+  [CompetencyFrameworkRepository\n(driven port)] as REPO
+}
+
+package "application" {
+  [CompetencyFrameworkService] as SVC
+  [FrameworkModelAssembler\n(T2M injection)] as ASM
+  [RegisterFrameworkCommand] as CMD
+}
+
+package "infrastructure.web" {
+  [CompetencyFrameworkController] as CTRL
+  [FrameworkWebMapper] as WMAP
+  [ExceptionHandler -> RFC 9457] as EXH
+}
+
+package "infrastructure.persistence" {
+  [JpaCompetencyFrameworkRepository] as JREPO
+  [FrameworkModelJpaEntity] as ENT
+  [EmfJsonModelSerializer] as SER
+}
+
+CTRL --> SVC
+CTRL --> WMAP
+SVC --> ASM
+SVC --> AGG
+SVC --> REPO
+AGG --> CV
+ECV .up.|> CV
+ASM --> MM
+ECV --> MM
+WMAP --> MM
+JREPO .up.|> REPO
+JREPO --> ENT
+JREPO --> SER
+SER --> MM
+
+note right of AGG
+  Invariant inside the boundary:
+  register() refuses non-conforming
+  models (always-valid aggregate)
+end note
+@enduml

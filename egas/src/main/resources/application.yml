@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: egas
+
+  threads:
+    virtual:
+      enabled: true   # ADR-004: Loom over WebFlux — blocking style, non-blocking scalability
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/egas}
+    username: ${DB_USERNAME:egas}
+    password: ${DB_PASSWORD:egas}   # dev default only; real values injected via environment
+
+  flyway:
+    # Module migration locations are pre-wired; directories are added as each context lands.
+    fail-on-missing-locations: false
+    locations:
+      - classpath:db/migration/common
+      - classpath:db/migration/competency
+      - classpath:db/migration/learner
+      - classpath:db/migration/catalogue
+      - classpath:db/migration/gapanalysis
+      - classpath:db/migration/recommendation
+
+  jackson:
+    default-property-inclusion: non_null
+
+  jpa:
+    open-in-view: false          # no lazy loading in the web layer; transactions end at the application service
+    hibernate:
+      ddl-auto: validate         # Flyway owns the schema; Hibernate only verifies the mapping against it
+
+  mvc:
+    problemdetails:
+      enabled: true              # RFC 9457 problem+json for framework-raised errors (400, 405, ...)
+
+  docker:
+    compose:
+      lifecycle-management: start_only   # local dev convenience; keep DB running across restarts
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  error:
+    # Secure defaults: no leakage of internals via error responses. Structured, intentional
+    # error bodies (RFC 9457 problem details) arrive with the first controllers in Step 3/4.
+    include-message: never
+    include-stacktrace: never

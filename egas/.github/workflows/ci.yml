@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Runs unit + Testcontainers integration tests AND the architectural fitness
+      # functions (Modulith verify, ArchUnit rules). A boundary violation fails the
+      # build exactly like a failing unit test — architecture is continuously verified.
+      - name: Build, test and verify architecture
+        run: mvn -B -ntp verify
+
+      # Generated module diagrams and canvases: dissertation evidence on every commit.
+      - name: Publish generated architecture documentation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modulith-architecture-docs
+          path: target/spring-modulith-docs
+          if-no-files-found: ignore
