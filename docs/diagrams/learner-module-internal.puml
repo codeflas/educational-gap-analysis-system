@@ -1,6 +1,6 @@
 @startuml learner-module-internal
-' Ports-and-adapters inside the Learner Profiling module (Step 4 Phase 1 slice).
-' Domain ring only: no application services, adapters or controllers exist yet.
+' Ports-and-adapters inside the Learner Profiling module, as implemented at the end of Step 4.
+' Dependencies point inwards only; the domain ring knows no framework.
 skinparam componentStyle rectangle
 
 package "competency.api (named interface)" {
@@ -30,26 +30,53 @@ package "domain.policy" {
   [UnresolvableEvidenceException] as UEX
 }
 
+package "application" {
+  [LearnerProfileService\n(transaction boundary)] as SVC
+  [CreateLearnerProfileCommand\nRecordEvidenceCommand] as CMD
+  [LearnerModuleConfiguration] as MCFG
+}
+
+package "infrastructure.web" {
+  [LearnerProfileController\n/api/learners] as CTRL
+  [LearnerWebMapper] as WMAP
+  [ExceptionHandler -> RFC 9457] as EXH
+  [Request / Response DTOs] as DTO
+}
+
+package "infrastructure.persistence" {
+  [JpaLearnerProfileRepository] as JREPO
+  [Profile · Assertion · Evidence\nJPA entities] as ENT
+  [Spring Data + summary projection] as SD
+}
+
+CTRL --> SVC
+CTRL --> WMAP
+CTRL --> DTO
+CTRL --> EXH
+WMAP --> CMD
+SVC --> CMD
+SVC --> AGG
+SVC --> REPO
+SVC --> POL
+SVC --> EXC
+MCFG --> HCP
 AGG --> LearnerId
 AGG --> SUBJ
 AGG --> PA
 AGG --> VO
 AGG --> POL
-AGG --> EXC
 PA --> EV
 PA --> LVL
-PA --> POL
 PA --> CompetencyId
 PA --> CompetencyFrameworkId
 EV --> LVL
 EV --> VO
-REPO --> AGG
-REPO --> SUM
-REPO --> SUBJ
-SUM --> LearnerId
 HCP .up.|> POL
 HCP --> UEX
-POL --> LVL
+JREPO .up.|> REPO
+JREPO --> ENT
+JREPO --> SD
+SD --> SUM
 
 note right of AGG
   Invariants inside the boundary:
@@ -69,26 +96,26 @@ note bottom of PA
   without it (ADR-018).
 end note
 
-note bottom of AGG
-  == PLANNED — NOT IMPLEMENTED IN PHASE 1 ==
-  Nothing below this line exists in code yet. It is recorded
-  here because ADR-015 Amendment 1 splits ownership
-  authorisation across two locations, and neither can be
-  understood without the other. No component box is drawn
-  for either: what Phase 1 ships is the aggregate predicate
-  LearnerProfile.isOwnedBy(AuthSubject), shown above.
+note bottom of CTRL
+  Ownership authorisation (ADR-015 Amendment 1) is
+  enforced in two places, and neither is sufficient alone:
 
-  (1) [Phase 4] SecurityConfig — ordered filter-chain rules
+  (1) SecurityConfig (platform) — ordered chain rules
         GET /api/learners     -> hasAnyRole(EDUCATOR, ADMIN)
              /api/learners/** -> authenticated()
-  (2) [Phase 3] LearnerProfileService — ownership predicate
-        evaluated against the loaded aggregate, delegating
-        to isOwnedBy(AuthSubject)
+  (2) LearnerProfileService — ownership predicate against
+        the loaded aggregate, via isOwnedBy(AuthSubject)
 
-  Rationale (ADR-015 A1): the chain cannot see whose profile
-  is requested, so it admits on authentication alone and the
-  application layer decides. Denial is 404, not 403, so a
-  profile's existence is not disclosed.
+  The chain cannot see whose profile is requested, so it
+  admits on authentication alone and the application layer
+  decides. This controller resolves the caller's role to a
+  single callerMayReadAny boolean and passes it inward;
+  the learner module never sees the Role type, which lives
+  in platform and which its module DAG forbids it to reach.
+
+  Denial is 404, not 403, so a profile's existence is not
+  disclosed. Insufficient *role* is still 403 from the
+  chain, which reveals nothing about a specific resource.
 end note
 
 note right of POL
@@ -103,9 +130,20 @@ end note
 
 note bottom of SUBJ
   ADR-016: the caller's identity arrives as command data,
-  never from SecurityContextHolder. That is what allows the
-  ownership rule to be exercised with no security
-  infrastructure at all. The command that will carry it is a
-  Phase 3 component and is not drawn here.
+  extracted from the validated JWT by the controller and
+  passed inward as an ordinary value. Nothing in the
+  application or domain reads SecurityContextHolder — a
+  rule the applicationStaysOutOfAdapters fitness function
+  enforces — which is why the whole ownership matrix is
+  testable with no security infrastructure at all.
+end note
+
+note bottom of JREPO
+  ADR-020: relational tables, not a jsonb document.
+  uq_assertion_profile_competency makes the aggregate's
+  central invariant unviolatable at rest, discharging the
+  trust assumption reconstitute() records. Evidence row ids
+  are derived from (assertionId, seq) so re-saving updates
+  in place instead of colliding with its own orphans.
 end note
 @enduml

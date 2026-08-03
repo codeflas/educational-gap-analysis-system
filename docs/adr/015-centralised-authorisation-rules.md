@@ -94,7 +94,13 @@ Listing every profile is a coarse, role-shaped question and stays here. Everythi
 `/api/learners/**` is admitted by the chain on authentication alone and decided on ownership by the
 application layer, because the chain cannot see whose profile is being requested. Order is
 semantically significant — the list rule must precede the general one — and is asserted cell by
-cell in `LearnerProfileOwnershipTests` rather than trusted to review.
+cell in `LearnerProfileApiTests` rather than trusted to review.
+
+*Correction (Step 4 Phase 5, 2026-08-03): this paragraph originally cited
+`LearnerProfileOwnershipTests`, a class the Step 4 plan projected but which was never created — its
+seven planned cells were delivered inside `LearnerProfileApiTests` (14 tests) instead, exercised
+with real minted tokens. The decision and the rule ordering are unchanged; only the citation is
+corrected.*
 
 **Role interpretation stays in the security layer.** The `learner` module declares
 `allowedDependencies = {"competency :: api"}` and so cannot reference `Role`, which lives in

@@ -15,6 +15,17 @@ reasoning that displaced it are retained in §9.1 rather than deleted, so the ch
 readable rather than silent. §11's persistence row, §12's manifest, §13's risk register and §14's
 Phase 2 row are updated to match. No other section is affected, and no earlier decision is altered.
 
+**Amendment log — A2 (3 Aug 2026, before Phase 4 implementation):** §8's `/me` rows are reconciled
+with ADR-015 Amendment 1 — any authenticated principal may provision and populate their own
+profile, and role restrictions apply only to `GET /api/learners`. Recorded in full at §8.
+
+**Amendment log — A3 (3 Aug 2026, Phase 5):** §11, §12 and §14 are reconciled with what was
+delivered. Projected estimates are retained beside the delivered figures rather than overwritten,
+so the plan reads as both forecast and record: every test tier over-delivered, the projected
+`LearnerProfileOwnershipTests` was merged into `LearnerProfileApiTests`, and test classes are
+package-nested to mirror the rings they exercise. ADR-015 Amendment 1's citation was corrected to
+match. No decision is altered by this amendment.
+
 ---
 
 ## 1. Current Architectural Assessment
@@ -477,13 +488,12 @@ Target: **~45 new tests, suite ≈ 137**, all green on real PostgreSQL 16.
 
 | Tier | Class | ≈ | Establishes |
 |---|---|---|---|
-| Domain unit | `LearnerProfileAggregateTests` | 8 | Profile creation; first evidence creates an assertion; further evidence extends and re-resolves it; one-assertion-per-competency invariant; ownership predicate on the aggregate; identity equality; fixed `Clock` timestamps |
-| Domain unit | `LearnerValueObjectTests` | 5 | Construction validation and normalisation for `AuthSubject`, `DisplayName`, `AttainedLevel`, `Confidence` bounds (incl. NaN) |
-| Domain unit | `LevelResolutionPolicyTests` | 5 | Highest-confidence-wins; recency tie-break; single-evidence case; empty-evidence refusal; substitutability via a lambda policy |
-| Application | `LearnerProfileServiceTests` | 7 | **Ownership decided correctly with no security infrastructure present** — the ADR-016 payoff, asserted directly; duplicate-profile rejection; reader-may-read-any path; not-found path |
+| Domain unit | `LearnerProfileAggregateTests` | 8 → **10 (A3)** | Profile creation; first evidence creates an assertion; further evidence extends and re-resolves it; one-assertion-per-competency invariant; ownership predicate on the aggregate; identity equality; fixed `Clock` timestamps; **plus the `reconstitute` trust-boundary and reconstitution-fidelity tests added at Phase 1 review** |
+| Domain unit | `LearnerValueObjectTests` | 5 → **6 (A3)** | Construction validation and normalisation for `AuthSubject`, `DisplayName`, `AttainedLevel`, `Confidence` bounds (incl. NaN); **plus `Comparable`/`equals` consistency for `AttainedLevel`** |
+| Domain unit | `LevelResolutionPolicyTests` | 5 → **8 (A3)** | Highest-confidence-wins; recency tie-break; single-evidence case; empty-evidence refusal; substitutability via a lambda policy; **plus the ordinal-and-code tie-break making resolution deterministic for any input** |
+| Application | `LearnerProfileServiceTests` | 7 → **11 (A3)** | **Ownership decided correctly with no security infrastructure present** — the ADR-016 payoff, asserted directly; duplicate-profile rejection; reader-may-read-any path; not-found path; **system-assigned `recordedAt`; denial indistinguishable from absence** |
 | Persistence | `JpaLearnerProfileRepositoryTests` | 6 → **11 delivered (A1)** | `@DataJpaTest` on real PostgreSQL: field-by-field aggregate round-trip over **relational** evidence rows (ADR-020, not jsonb); update round-trip proving evidence accumulates rather than colliding; evidence ordering; `AssertionId` persistence; confidence precision; `findByAuthSubject`; `existsByAuthSubject`; unique-constraint → domain exception; the constraint rejecting a duplicate assertion inserted directly; summaries as a projection loading zero entities |
-| Web/API | `LearnerProfileApiTests` | 9 | `/me` create → read → record-evidence cycle; `404` on absent; `409` on duplicate; `400` on malformed; assertion rendering incl. resolved level; **a request body carrying `authSubject` is ignored** |
-| Security | `LearnerProfileOwnershipTests` | 7 | The ownership matrix with **real minted tokens** (the Step 3 convention): learner reads own → 200; learner reads other → 404; educator reads any → 200; admin reads any → 200; learner lists → 403; educator lists → 200; no token → 401 + `WWW-Authenticate: Bearer` |
+| Web/API + Security | `LearnerProfileApiTests` | 9 + 7 → **14 delivered (A3)** | **Merged**: the two projected classes became one. `/me` create → read → record-evidence cycle; `404` on absent; `409` on duplicate; `400` on malformed; assertion rendering incl. resolved level; **a request body carrying `authSubject` is ignored**; and the ownership matrix with **real minted tokens** — learner reads own → 200; learner reads other → 404 **indistinguishable from an unknown id**; educator → 200; admin → 200; learner lists → 403; educator lists → 200; no token → 401 + `WWW-Authenticate: Bearer` |
 | Architecture | unchanged | 9 | Seven fitness functions plus two Modulith verifications pass **unmodified** — including the security rule that would fail on a `SecurityContextHolder` read |
 
 Conventions carried over deliberately: `*Tests` naming; no mocking framework (lambdas and
@@ -551,11 +561,16 @@ egas/src/test/java/ie/ul/egas/learner/LearnerFixtures.java
 egas/src/test/java/ie/ul/egas/learner/LearnerProfileAggregateTests.java
 egas/src/test/java/ie/ul/egas/learner/LearnerValueObjectTests.java
 egas/src/test/java/ie/ul/egas/learner/LevelResolutionPolicyTests.java
-egas/src/test/java/ie/ul/egas/learner/LearnerProfileServiceTests.java
-egas/src/test/java/ie/ul/egas/learner/LearnerProfileApiTests.java
-egas/src/test/java/ie/ul/egas/learner/LearnerProfileOwnershipTests.java
+egas/src/test/java/ie/ul/egas/learner/application/LearnerProfileServiceTests.java          (A3: package-nested)
+egas/src/test/java/ie/ul/egas/learner/infrastructure/web/LearnerProfileApiTests.java       (A3: package-nested)
 egas/src/test/java/ie/ul/egas/learner/infrastructure/persistence/JpaLearnerProfileRepositoryTests.java
 ```
+
+**Amendment A3 — delivered test topology.** Seven test files, not eight: the projected
+`LearnerProfileOwnershipTests` was never created, and its seven ownership cells were delivered
+inside `LearnerProfileApiTests` instead, which is where they run against the same real minted
+tokens. Service and API tests are nested in packages mirroring the rings they exercise rather than
+sitting flat under `learner/`. ADR-015 Amendment 1's citation was corrected to match.
 
 ### Created — documentation (4)
 ```
@@ -619,9 +634,9 @@ each ends with verification and a stop-and-wait gate.
 | **0 — Decisions** | ADR-017, ADR-018, ADR-019 authored and Accepted; ADR-015 amendment drafted; index updated. No code. | Ratification of R-1…R-5 |
 | **1 — Domain** | Aggregate, entity, six value objects, exceptions, repository port, resolution policy + default impl. Framework-free. | `mvn verify` green; +18 tests (≈110) |
 | **2 — Persistence** | `V200__`, **three** JPA entities (A1: `evidence_record` became a table under ADR-020, not a `jsonb` column), Spring Data internals, port adapter with constraint translation and derived evidence row ids. | **Delivered** at `ab1df7f`: green; **+11 (127 actual**, against ≈116 projected); `ddl-auto: validate` passes; zero-touch under `competency/src/main` held |
-| **3 — Application** | Service, two commands, module configuration. **Ownership logic proven with zero security infrastructure** — the ADR-016 demonstration. | Green; +7 (≈123) |
-| **4 — Web & authorisation** | Controller, mapper, advice, four DTOs; `SecurityConfig` learner rules; ADR-015 amendment committed. | Green; +16 (≈139); nine architecture tests unchanged; empty diff under `competency/src/main` |
-| **5 — Documentation & evidence** | `learner-module-internal.puml`; evidence capture (ownership matrix transcripts, Swagger cycle); Step 4 completion review. | DoD met; step report; stop |
+| **3 — Application** | Service, two commands, module configuration. **Ownership logic proven with zero security infrastructure** — the ADR-016 demonstration. | **Delivered** at `ad0983a`: green; **+11 (138 actual**, against ≈123 projected) |
+| **4 — Web & authorisation** | Controller, mapper, advice, four DTOs; `SecurityConfig` learner rules; ADR-015 amendment committed. | **Delivered** at `9cfd8a2`: green; **+14 (152 actual**, against ≈139 projected); nine architecture tests unchanged; empty diff under `competency/src/main` |
+| **5 — Documentation & evidence** | `learner-module-internal.puml` rewritten for all four rings; ADR-015 A1 citation corrected; this amendment (A3); `docs/evidence/learner/` capture script; Step 4 completion review; documentation-reference integrity check. | DoD met; step report; stop |
 
 **Definition of Done (draft, to be finalised at Phase 0):** `mvn verify` BUILD SUCCESS with ≈137+
 tests and zero failures on real PostgreSQL; ownership matrix proven cell-by-cell with real tokens;

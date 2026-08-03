@@ -1,0 +1,17 @@
+# Deliberate dangling references, one token per line.
+#
+# Every entry needs a stated reason. This file exists so that a correction note can name the thing
+# it corrects, and so that frozen historical documents are not edited to suit a checker — not as a
+# place to silence a real defect. The checker counts allowlisted tokens aloud on every run, so
+# growth here is visible rather than quiet.
+
+# Named by correction notes in ADR-015 Amendment 1 and step4-plan A3, both of which record that
+# this class was projected by the plan and never created; its cells were delivered inside
+# LearnerProfileApiTests. Naming it is the point of the note.
+LearnerProfileOwnershipTests
+
+# Cited by docs/reviews/step2-completion-review.md, which describes an ArchUnit properties file
+# that does not exist in the tree. Per the governance practice recorded in the Step 3 plan (§8,
+# note A3), committed historical review documents are not modified; the inaccuracy is recorded
+# here and in the Step 4 completion review rather than edited away.
+src/test/resources/archunit.properties
