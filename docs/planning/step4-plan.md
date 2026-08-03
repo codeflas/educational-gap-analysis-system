@@ -7,6 +7,14 @@ derived from that tree; nothing is carried over from prior conversation state.
 **Baseline verified in-snapshot:** 92 tests (85 `@Test` + 7 `@ArchTest`), ADRs 001–016 all
 Accepted, seven ArchUnit fitness functions plus two Spring Modulith verifications.
 
+**Amendment log — A1 (3 Aug 2026, recorded after Phase 2 implementation):** §9 proposed storing
+evidence in a `jsonb` column on `proficiency_assertion`. **ADR-020 (Accepted) supersedes that
+proposal**: learner state is persisted in relational tables, and `jsonb` remains confined to the
+dynamic model artefacts of the Competency Modelling context. The superseded proposal and the
+reasoning that displaced it are retained in §9.1 rather than deleted, so the change of direction is
+readable rather than silent. §11's persistence row, §12's manifest, §13's risk register and §14's
+Phase 2 row are updated to match. No other section is affected, and no earlier decision is altered.
+
 ---
 
 ## 1. Current Architectural Assessment
@@ -332,6 +340,11 @@ syntactically) invalid, `400` from Bean Validation on DTOs.
 
 ## 9. Database Design
 
+> **SUPERSEDED BY ADR-020 (amendment A1).** The schema proposed in this section — in particular
+> the `jsonb` evidence column — was **not** the design implemented. It is preserved unedited below
+> as the record of what was proposed and considered; §9.1 states what was built instead and why.
+> Read §9.1 before treating anything in this section as current.
+
 `egas/src/main/resources/db/migration/learner/V200__create_learner_profile_tables.sql`
 (directory to be created; the Flyway location is already wired).
 
@@ -373,6 +386,46 @@ removable if unused.
 
 No cross-schema foreign key to `competency.framework_model` — forbidden by ADR-011 and by the V1
 migration header.
+
+### 9.1 Amendment A1 — the implemented schema (ADR-020)
+
+**What was proposed above.** Evidence as a `jsonb` array on `proficiency_assertion`, on the grounds
+that evidence is append-only, always read as a whole set in service of one assertion, never queried
+independently, and shaped to evolve — with a third relational table dismissed as adding a join for
+no query benefit.
+
+**What was decided instead.** ADR-020 places learner state in three relational tables —
+`learner.profile`, `learner.proficiency_assertion`, `learner.evidence_record` — and confines
+`jsonb` to dynamic model artefacts. The proposal was not wrong about evidence's access pattern; it
+was displaced by three considerations it had not weighed:
+
+1. **Invariant enforcement.** The aggregate's central rule is *at most one assertion per
+   competency*, and `LearnerProfile`'s committed documentation states that a database constraint
+   backs it as a second line of defence. `uq_assertion_profile_competency` delivers that. The
+   equivalent inside a `jsonb` array — "no two elements share a `competency_id`" — is not
+   expressible as a PostgreSQL constraint, so the proposed schema would have left shipped
+   documentation promising a guarantee the database did not provide.
+2. **Query requirements.** Gap Analysis (ADR-007) will ask which learners hold which competency.
+   Against rows that is an indexed lookup; against documents it is a containment predicate over
+   every profile. The same applies to `findAllSummaries`, where an assertion count is an aggregate
+   query relationally and a document parse otherwise.
+3. **Aggregate persistence needs.** Evidence rows carry no domain identity, so a document column
+   hides the question of row identity entirely — and it is precisely that question which decides
+   whether re-saving an existing profile updates in place or collides with itself. Making the rows
+   explicit surfaced the problem where it could be constrained, indexed, and tested.
+
+The distinguishing test ADR-020 records is **who defines the shape**: a competency framework's
+structure is defined at runtime by its metamodel and admits no stable DDL, whereas a learner
+profile's is fixed by domain types the compiler already checks. `jsonb` is right for the first and
+unnecessary for the second.
+
+**Implemented schema** (`V200__create_learner_profile_tables.sql`, committed): `profile`
+(`uq_learner_auth_subject`); `proficiency_assertion` (`uq_assertion_profile_competency`, intra-schema
+FK, `competency_id`/`framework_id` unkeyed per ADR-019); `evidence_record` (`uq_evidence_assertion_seq`,
+`seq` for append order, `confidence numeric(4,3)`), plus `CHECK` constraints mirroring the
+`Confidence` and `AttainedLevel` value objects. The proposed `ix_assertion_competency` index was
+**deferred**, following V100's precedent of adding an index when a predicate exists rather than in
+anticipation of one; ADR-020's Future Evolution records it as the change Gap Analysis will make.
 
 ---
 
@@ -418,7 +471,7 @@ Target: **~45 new tests, suite ≈ 137**, all green on real PostgreSQL 16.
 | Domain unit | `LearnerValueObjectTests` | 5 | Construction validation and normalisation for `AuthSubject`, `DisplayName`, `AttainedLevel`, `Confidence` bounds (incl. NaN) |
 | Domain unit | `LevelResolutionPolicyTests` | 5 | Highest-confidence-wins; recency tie-break; single-evidence case; empty-evidence refusal; substitutability via a lambda policy |
 | Application | `LearnerProfileServiceTests` | 7 | **Ownership decided correctly with no security infrastructure present** — the ADR-016 payoff, asserted directly; duplicate-profile rejection; reader-may-read-any path; not-found path |
-| Persistence | `JpaLearnerProfileRepositoryTests` | 6 | `@DataJpaTest` on real PostgreSQL: aggregate round-trip incl. jsonb evidence; `findByAuthSubject`; unique-constraint → domain exception; summaries load no assertions; cascade delete |
+| Persistence | `JpaLearnerProfileRepositoryTests` | 6 → **11 delivered (A1)** | `@DataJpaTest` on real PostgreSQL: field-by-field aggregate round-trip over **relational** evidence rows (ADR-020, not jsonb); update round-trip proving evidence accumulates rather than colliding; evidence ordering; `AssertionId` persistence; confidence precision; `findByAuthSubject`; `existsByAuthSubject`; unique-constraint → domain exception; the constraint rejecting a duplicate assertion inserted directly; summaries as a projection loading zero entities |
 | Web/API | `LearnerProfileApiTests` | 9 | `/me` create → read → record-evidence cycle; `404` on absent; `409` on duplicate; `400` on malformed; assertion rendering incl. resolved level; **a request body carrying `authSubject` is ignored** |
 | Security | `LearnerProfileOwnershipTests` | 7 | The ownership matrix with **real minted tokens** (the Step 3 convention): learner reads own → 200; learner reads other → 404; educator reads any → 200; admin reads any → 200; learner lists → 403; educator lists → 200; no token → 401 + `WWW-Authenticate: Bearer` |
 | Architecture | unchanged | 9 | Seven fitness functions plus two Modulith verifications pass **unmodified** — including the security rule that would fail on a `SecurityContextHolder` read |
@@ -463,6 +516,7 @@ egas/src/main/java/ie/ul/egas/learner/application/RecordEvidenceCommand.java
 egas/src/main/java/ie/ul/egas/learner/application/LearnerModuleConfiguration.java
 egas/src/main/java/ie/ul/egas/learner/infrastructure/persistence/LearnerProfileJpaEntity.java
 egas/src/main/java/ie/ul/egas/learner/infrastructure/persistence/ProficiencyAssertionJpaEntity.java
+egas/src/main/java/ie/ul/egas/learner/infrastructure/persistence/EvidenceRecordJpaEntity.java  (A1: added — evidence is a table under ADR-020, not a jsonb column)
 egas/src/main/java/ie/ul/egas/learner/infrastructure/persistence/LearnerProfileSpringDataRepository.java
 egas/src/main/java/ie/ul/egas/learner/infrastructure/persistence/JpaLearnerProfileRepository.java
 ```
@@ -535,7 +589,9 @@ docs/adr/README.md                                                    (index row
 | Ownership check placed in the filter chain by habit, silently widening access | Med/High | ADR-015 amendment written *before* the web phase; the ownership matrix asserts every cell with real tokens |
 | Subject leaking in from a request body | Low/High | DTOs have no such field; an explicit test asserts a supplied `authSubject` is ignored |
 | Filter-chain rule ordering error (list rule after the general rule) | Med/Med | Order-sensitive cells asserted individually; the inherited failure mode ADR-015 already records |
-| jsonb evidence mapping friction (Hibernate `@JdbcTypeCode`, list serialisation) | Med/Low | Proven pattern in `FrameworkModelJpaEntity`; round-trip asserted in the persistence suite |
+| ~~jsonb evidence mapping friction (Hibernate `@JdbcTypeCode`, list serialisation)~~ — **retired by A1**: ADR-020 chose relational evidence rows, so this risk cannot arise | — | — |
+| **(A1, materialised)** Evidence row identity on re-save: rows carry no domain identity, so generated ids differ on every save and a merge inserts a replacement set colliding with its own orphans | Med/**High** | Row ids derived from `(assertionId, seq)` rather than generated, making a re-save an update in place; **caught in review by measurement, not by the suite** — the update round-trip test that now guards it was added because no test exercised a second save. Valid only while ADR-018 keeps evidence append-only |
+| **(A1)** Two persistence idioms coexist (relational learner, jsonb competency) and read as inconsistent without the rationale | Low/Low | ADR-020 records the shape-definition test that distinguishes them; §9.1 cross-references it |
 | Aggregate load cost as assertions accumulate | Low/Med | Bounded by realistic framework size; measured in W11; documented escape hatch in §3 |
 | Shared mutable test state compounding (inherited) | Med/Med | Per-class cleanup for the new suites (§11) |
 | Scope creep into assessment/grading features | Med/Med | R-2's cut-line is contractual; delete endpoint and evidence revision explicitly out of scope |
@@ -552,7 +608,7 @@ each ends with verification and a stop-and-wait gate.
 |---|---|---|
 | **0 — Decisions** | ADR-017, ADR-018, ADR-019 authored and Accepted; ADR-015 amendment drafted; index updated. No code. | Ratification of R-1…R-5 |
 | **1 — Domain** | Aggregate, entity, six value objects, exceptions, repository port, resolution policy + default impl. Framework-free. | `mvn verify` green; +18 tests (≈110) |
-| **2 — Persistence** | `V200__`, two JPA entities, Spring Data internals, port adapter with constraint translation. | Green; +6 (≈116); `ddl-auto: validate` passes |
+| **2 — Persistence** | `V200__`, **three** JPA entities (A1: `evidence_record` became a table under ADR-020, not a `jsonb` column), Spring Data internals, port adapter with constraint translation and derived evidence row ids. | **Delivered** at `ab1df7f`: green; **+11 (127 actual**, against ≈116 projected); `ddl-auto: validate` passes; zero-touch under `competency/src/main` held |
 | **3 — Application** | Service, two commands, module configuration. **Ownership logic proven with zero security infrastructure** — the ADR-016 demonstration. | Green; +7 (≈123) |
 | **4 — Web & authorisation** | Controller, mapper, advice, four DTOs; `SecurityConfig` learner rules; ADR-015 amendment committed. | Green; +16 (≈139); nine architecture tests unchanged; empty diff under `competency/src/main` |
 | **5 — Documentation & evidence** | `learner-module-internal.puml`; evidence capture (ownership matrix transcripts, Swagger cycle); Step 4 completion review. | DoD met; step report; stop |
