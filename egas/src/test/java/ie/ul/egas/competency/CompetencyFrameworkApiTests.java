@@ -2,6 +2,8 @@ package ie.ul.egas.competency;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ie.ul.egas.TestcontainersConfiguration;
+import ie.ul.egas.competency.api.CompetencyFrameworkId;
+import ie.ul.egas.competency.api.CompetencyId;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -85,7 +87,13 @@ class CompetencyFrameworkApiTests {
                 .andExpect(jsonPath("$.areas[0].code").value("DES"))
                 .andExpect(jsonPath("$.areas[0].competencies[1].code").value("SE-ARC"))
                 .andExpect(jsonPath("$.areas[0].competencies[1].prerequisites[0]").value("SE-DSN"))
-                .andExpect(jsonPath("$.areas[0].competencies[0].levelDescriptors[0].levelCode").value("L2"));
+                .andExpect(jsonPath("$.areas[0].competencies[0].levelDescriptors[0].levelCode").value("L2"))
+                // The derived competency identity (ADR-019 Amendment 1). Until it was published a
+                // client had no way to learn an id that any model would recognise, so evidence
+                // recorded against a competency could never be matched back to one.
+                .andExpect(jsonPath("$.areas[0].competencies[0].id").value(
+                        CompetencyId.forCompetency(new CompetencyFrameworkId(UUID.fromString(id)), "SE-DSN")
+                                .value().toString()));
     }
 
     @Test

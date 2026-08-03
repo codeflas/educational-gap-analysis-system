@@ -26,7 +26,13 @@ public record FrameworkDetailResponse(
                                List<CompetencyResponse> competencies) {
     }
 
-    public record CompetencyResponse(String code, String name, String description,
+    /**
+     * {@code id} is the derived competency identity (ADR-019 Amendment 1). It is exposed so a
+     * client recording learner evidence obtains a real identifier instead of inventing one — until
+     * it was published, nothing a caller could see corresponded to a competency any model would
+     * recognise. Additive: existing consumers ignore the new field.
+     */
+    public record CompetencyResponse(UUID id, String code, String name, String description,
                                      List<String> prerequisites,
                                      List<LevelDescriptorResponse> levelDescriptors) {
     }

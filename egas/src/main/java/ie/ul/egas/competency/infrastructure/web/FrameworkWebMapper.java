@@ -1,5 +1,7 @@
 package ie.ul.egas.competency.infrastructure.web;
 
+import ie.ul.egas.competency.api.CompetencyFrameworkId;
+import ie.ul.egas.competency.api.CompetencyId;
 import ie.ul.egas.competency.application.RegisterFrameworkCommand;
 import ie.ul.egas.competency.domain.metamodel.CompetencyMetamodel;
 import ie.ul.egas.competency.domain.model.CompetencyFramework;
@@ -82,7 +84,9 @@ class FrameworkWebMapper {
                 framework.status(),
                 framework.registeredAt(),
                 many(root, mm.frameworkLevels()).stream().map(this::toLevel).toList(),
-                many(root, mm.frameworkAreas()).stream().map(this::toArea).toList());
+                many(root, mm.frameworkAreas()).stream()
+                        .map(area -> toArea(area, framework.id()))
+                        .toList());
     }
 
     private FrameworkDetailResponse.LevelResponse toLevel(EObject level) {
@@ -92,16 +96,21 @@ class FrameworkWebMapper {
                 (Integer) level.eGet(mm.levelOrdinal()));
     }
 
-    private FrameworkDetailResponse.AreaResponse toArea(EObject area) {
+    private FrameworkDetailResponse.AreaResponse toArea(EObject area, CompetencyFrameworkId frameworkId) {
         return new FrameworkDetailResponse.AreaResponse(
                 str(area, mm.areaCode()),
                 str(area, mm.areaName()),
                 str(area, mm.areaDescription()),
-                many(area, mm.areaCompetencies()).stream().map(this::toCompetency).toList());
+                many(area, mm.areaCompetencies()).stream()
+                        .map(competency -> toCompetency(competency, frameworkId))
+                        .toList());
     }
 
-    private FrameworkDetailResponse.CompetencyResponse toCompetency(EObject competency) {
+    /** The framework id is threaded through solely to derive competency identity (ADR-019 A1). */
+    private FrameworkDetailResponse.CompetencyResponse toCompetency(EObject competency,
+                                                                    CompetencyFrameworkId frameworkId) {
         return new FrameworkDetailResponse.CompetencyResponse(
+                CompetencyId.forCompetency(frameworkId, str(competency, mm.competencyCode())).value(),
                 str(competency, mm.competencyCode()),
                 str(competency, mm.competencyName()),
                 str(competency, mm.competencyDescription()),

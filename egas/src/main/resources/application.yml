@@ -29,6 +29,12 @@ spring:
     open-in-view: false          # no lazy loading in the web layer; transactions end at the application service
     hibernate:
       ddl-auto: validate         # Flyway owns the schema; Hibernate only verifies the mapping against it
+    properties:
+      hibernate:
+        # Only entities that declare no schema of their own resolve here — in practice just Spring
+        # Modulith's event-publication entity, which ADR-011 Amendment 1 places in `common`. Every
+        # EGAS entity names its own module schema explicitly, so none of them is affected.
+        default_schema: common
 
   mvc:
     problemdetails:

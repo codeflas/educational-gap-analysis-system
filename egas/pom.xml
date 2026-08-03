@@ -101,6 +101,13 @@
       <groupId>org.springframework.modulith</groupId>
       <artifactId>spring-modulith-starter-core</artifactId>
     </dependency>
+    <!-- Durable event publication (ADR-007, ADR-022): the registry records which listener has
+         consumed which event, so a projection failure is recoverable rather than silent. The
+         single new dependency of Step 5 phase 1. -->
+    <dependency>
+      <groupId>org.springframework.modulith</groupId>
+      <artifactId>spring-modulith-starter-jpa</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-jpa</artifactId>
