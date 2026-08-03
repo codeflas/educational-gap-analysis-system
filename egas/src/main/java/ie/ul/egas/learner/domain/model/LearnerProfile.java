@@ -87,10 +87,13 @@ public final class LearnerProfile {
      * Rehydration cannot produce a structurally malformed object, only a semantically stale one.
      *
      * <p><b>Where the line is actually held.</b> The write path is the sole author of aggregate
-     * state, so {@link #recordEvidence} is the invariant's real guardian; from Phase 2 a unique
-     * constraint on (profile, competency) backs it in the database, as the class documentation
-     * states. The trust boundary is therefore the persistence adapter: its round-trip tests are
-     * what must demonstrate that what was written is what comes back.
+     * state, so {@link #recordEvidence} is the invariant's real guardian, and the
+     * {@code uq_assertion_profile_competency} constraint on
+     * {@code learner.proficiency_assertion (profile_id, competency_id)} backs it in the database —
+     * making the rule unviolatable at rest whatever the adapter does (ADR-020). The trust boundary
+     * is therefore the persistence adapter, and {@code JpaLearnerProfileRepositoryTests}
+     * demonstrates both halves: that what was written is what comes back, and that the constraint
+     * rejects a duplicate inserted directly, bypassing this class entirely.
      */
     public static LearnerProfile reconstitute(LearnerId id, AuthSubject authSubject,
                                               DisplayName displayName, Instant createdAt,

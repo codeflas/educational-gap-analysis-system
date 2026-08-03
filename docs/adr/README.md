@@ -24,6 +24,7 @@ Full texts to be transcribed from the design log; statuses reflect the architect
 | 017 | Learner identity mapping: auth subject on the profile, explicit provisioning | Accepted |
 | 018 | Evidence-backed proficiency with a substitutable level-resolution policy | Accepted |
 | 019 | Cross-context reference integrity: competency identifiers unvalidated | Accepted |
+| 020 | Learner state relational; JSONB confined to dynamic model artefacts | Accepted |
 
 **ADR-010 realisation note (Step 3).** ADR-010 fixed authentication and authorisation as
 self-issued RSA JWTs validated by a Spring OAuth2 resource server. It is realised in Step 3 and
