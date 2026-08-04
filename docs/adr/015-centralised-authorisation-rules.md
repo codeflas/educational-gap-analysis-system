@@ -157,8 +157,22 @@ instead would be a less accurate diagnostic bought with no privacy gain, and wou
 reader that the rule is "always 404" rather than "never confirm the existence of something you
 looked up".
 
-**The rules this adds to the chain** are recorded when the web adapter lands in Phase 5; nothing in
-the filter chain changes for Phase 4b, which has no endpoints.
+**The rule this adds to the chain** (Phase 5, delivered), before the terminal rule:
+
+    /api/gap-reports/**   -> authenticated()
+
+**One rule, and no role rule — its absence is the decision.** Every gap-analysis operation is scoped
+to a particular learner, and "may this caller act for that learner" is precisely the predicate this
+ADR records a URL pattern cannot express. There is no coarse, role-shaped question here to keep in
+the chain, unlike `GET /api/learners`, which lists every profile and stays. The rule is stated
+explicitly rather than left to fall through to `anyRequest().authenticated()`, so the whole policy
+remains readable as one ordered list.
+
+Gap Analysis owns the `/api/gap-reports` prefix rather than nesting under `/api/learners/**`, so each
+context's rules stay one contiguous block. Both denial shapes are decided in `GapAnalysisService`
+and rendered by `GapAnalysisExceptionHandler`; `GapReportApiTests` asserts every cell with real
+minted tokens, including that the 404 body is byte-identical whether the report is absent or merely
+forbidden.
 
 **Consequence for the reader.** The access policy now spans three places rather than two: the ordered
 rules here, the ownership predicate in `LearnerProfileService`, and the ownership predicate in

@@ -23,7 +23,9 @@ import org.springframework.security.web.SecurityFilterChain;
  *       scattered across controllers or a filter chain per module. Authorisation stays auditable
  *       in one place, and no security semantics leak into domain or application code. Step 4's
  *       learner-profile <em>ownership</em> checks need principal identity at the application
- *       level; ADR-015 records that as this rule set's designated extension point.</li>
+ *       level; ADR-015 records that as this rule set's designated extension point. Step 5 uses
+ *       that extension point a second time for gap reports, where every operation is
+ *       learner-scoped and none of it is expressible as a path.</li>
  *   <li><b>CSRF disabled</b> — a pure bearer-token API holds no cookie state, so there is no CSRF
  *       vector. The rationale is stronger now than at Step 1, but the revisit trigger is
  *       unchanged: reintroducing cookie-based state reopens this decision.</li>
@@ -96,6 +98,15 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/learners").hasAnyRole(
                                 Role.EDUCATOR.name(), Role.ADMIN.name())
                         .requestMatchers("/api/learners/**").authenticated()
+                        // Gap reports (ADR-015 Amendment 2). No role rule, and its absence is the
+                        // decision: every operation here is scoped to a particular learner, and
+                        // "may this caller act for that learner" is precisely the predicate a URL
+                        // pattern cannot express. All three are admitted on authentication and
+                        // decided in GapAnalysisService — as a 404 when a report was looked up and
+                        // must not be disclosed, as a 403 when the learner identifier came from the
+                        // caller and was never looked up. Stated explicitly rather than left to the
+                        // terminal rule, so the whole policy stays readable as one ordered list.
+                        .requestMatchers("/api/gap-reports/**").authenticated()
                         .anyRequest().authenticated())
                 .build();
     }

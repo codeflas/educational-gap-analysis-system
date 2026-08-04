@@ -245,7 +245,7 @@ All nine architecture tests are expected to pass **unmodified**.
 | **3 — Domain** | `GapReport`, `SkillGap`, snapshots, `GapSeverityPolicy` + default. Framework-free. | **Delivered**: green; **+43 (228 actual)**; severity substitutable through `GapSeverityPolicy` without touching the aggregate, storage or the API |
 | **4a — Persistence** | `V401__` gap tables; `GapReportRepository` port; JPA adapter and its three mapping entities; `GapReportSummary` read model. | **Delivered**: green; **+14 (242 actual)**; absence and stored severity both proven to survive a round trip on real PostgreSQL, and both aggregate invariants enforced at rest |
 | **4b — Application + ownership** | `GapAnalysisService`, `AnalyseGapCommand`, `learner.api.LearnerIdentityQuery` and its adapter, four outcome exceptions, ownership per ADR-015 A2/ADR-016. | **Delivered**: green; **+31 (273 actual)**; ownership matrix proven with no security infrastructure, and the whole slice proven end to end across three contexts |
-| **5 — Web adapter** | Controller, mapper, advice, DTOs; `SecurityConfig` gap rules. | Green; role/ownership matrix with real tokens; 404 non-disclosure |
+| **5 — Web adapter** | Controller, mapper, advice, DTOs; one `SecurityConfig` rule. | **Delivered**: green; **+20 (293 actual)**; role/ownership matrix with real minted tokens, 404 non-disclosure asserted as a byte-identical body, and absence rendered as an omitted field |
 | **6 — Documentation & evidence** | Module diagram; evidence pack incl. the integration-cost measurement; completion review; ADR-019 closure note. | DoD met; step report; stop |
 
 Phase 1 is deliberately first and deliberately small: it is the only phase that touches another
