@@ -105,6 +105,51 @@ still reports that as absence rather than rejecting it. The amendment makes refe
 not *verified* — the projection-based validation described below remains the mechanism for the
 latter.
 
+## Amendment 2 — closure status: precondition met, validation outstanding (Step 5, Accepted 2026-08-04)
+
+This ADR deferred reference validation to "when the Gap Analysis projection lands (W6, ADR-007)".
+That projection has now landed, so this amendment records what actually became possible and what did
+not. It is a **status note, not a closure**: the decision above is unchanged, and the deferred check
+remains undone.
+
+**Precondition: met.** The three things validation needed all exist as of Step 5, and none of them
+existed when this ADR was written.
+
+1. **A computable join key.** Amendment 1 derives `CompetencyId` from `(frameworkId, code)`, so both
+   contexts compute the same identifier without reading each other's tables. Before this, references
+   were not merely unvalidated but *unmatchable* — no comparison was possible in either direction.
+2. **A place the comparison can happen.** `V400` holds every competency of every registered framework
+   in the `gap_analysis` schema, keyed by that derived identity, rebuilt by replaying
+   `CompetencyModelRegistered`.
+3. **A legal route to learner data.** `learner.api.LearnerAttainmentQuery` carries a learner's
+   assertions across the boundary without a schema read, which ADR-011 forbids.
+
+**Validation: outstanding.** `GapAnalysisService` iterates the *model's* competencies and looks up
+attainment for each, so an assertion naming a competency absent from the model contributes nothing
+and is never reported. That is precisely the degradation this ADR predicted — "a competency that
+contributes nothing to a gap computation" — and it is the accepted behaviour, not a defect. What does
+not exist is the *report*: nothing tells anyone that a learner holds evidence against an identifier
+no registered model contains.
+
+**Why the remainder is a decision rather than a task.** This ADR's Future Evolution describes
+"assertions whose competency is absent from the published model … surfaced as a profile health
+check". A per-learner check is straightforward today — the two contracts above are sufficient. A
+**system-wide** sweep is not: `LearnerAttainmentQuery.attainmentsFor` is scoped to one learner, and
+ADR-011 forbids the cross-schema join that would make a global query cheap. Producing an
+installation-wide orphan report therefore requires a **new published contract on `learner.api`**, and
+publishing a contract is a decision to take deliberately rather than a piece of work to schedule.
+
+**Two closure paths, both defensible.** Either publish the contract a system-wide sweep needs and
+close this ADR on a genuine health check; or record that per-learner detection at analysis time is
+sufficient for the system's purpose and close it on that narrower basis. Leaving the question open is
+the weakest of the three, which is why it is stated here rather than left to a reader to infer.
+
+**What is unchanged.** Cross-context references remain unvalidated at write time. A learner may still
+record evidence against a competency that no model contains, Gap Analysis still reports that as
+absence rather than rejecting it, the module DAG still gains no edge, and Competency Modelling still
+exposes no existence query. Amendment 1 made references *matchable*; this amendment records that
+matchability has been realised in the projection without being turned into verification.
+
 ## Future evolution
 When the Gap Analysis projection lands (W6, ADR-007), reference validation becomes a report over
 existing data — assertions whose competency is absent from the published model — and can be

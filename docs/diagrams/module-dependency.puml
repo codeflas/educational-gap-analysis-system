@@ -1,0 +1,138 @@
+@startuml module-dependency
+' EGAS module dependency graph as implemented at the end of Step 5 (commit 1fe679d).
+'
+' Every edge below is DECLARED, not inferred: each arrow corresponds to an entry in some module's
+' @ApplicationModule(allowedDependencies = ...), and ModularityTests fails the build if code creates
+' a dependency this graph does not show. The diagram is therefore a rendering of an enforced rule
+' rather than an aspiration drawn alongside one.
+'
+' Two directions are shown because they are genuinely different, and conflating them is the usual
+' way a modular monolith's dependency story goes wrong:
+'   - solid  = compile-time dependency on another module's published api package
+'   - dashed = runtime data flow, which for the event edge points the OTHER way
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+package "shared kernel" as SHARED_PKG {
+  [shared\nIdentifier\nallowedDependencies = {}] as SHARED
+}
+
+package "technical" as TECH {
+  [platform\nJWT issuance · SecurityConfig · Role\nallowedDependencies = {}] as PLATFORM
+}
+
+package "bounded contexts" as CTX {
+  [competency\nCompetency Modelling\nallowedDependencies = {}] as COMPETENCY
+  [learner\nLearner Profiling\nallowedDependencies = {competency :: api}] as LEARNER
+  [gapanalysis\nGap Analysis\nallowedDependencies = {competency :: api, learner :: api}] as GAP
+  [catalogue\nLearning Catalogue (stub)\nallowedDependencies = {competency :: api}] as CATALOGUE
+  [recommendation\nRecommendation (stub)\nallowedDependencies =\n{competency :: api, gapanalysis :: api, catalogue :: api}] as RECO
+}
+
+LEARNER    --> COMPETENCY : competency.api
+GAP        --> COMPETENCY : competency.api
+GAP        --> LEARNER    : learner.api
+CATALOGUE  --> COMPETENCY : competency.api
+RECO       --> COMPETENCY : competency.api
+RECO       --> GAP        : gapanalysis.api
+RECO       --> CATALOGUE  : catalogue.api
+
+COMPETENCY ..> GAP : <<event>>\nCompetencyModelRegistered\n(durable registry, async)
+GAP        ..> LEARNER : <<query>>\nLearnerAttainmentQuery\nLearnerIdentityQuery (sync)
+
+note top of SHARED
+  Declared to Spring Modulith as a SHARED module
+  (@Modulithic(sharedModules = "shared") on EgasApplication),
+  so every module may use it without declaring it. It holds
+  one type — Identifier — and no behaviour. Keeping it that
+  small is what stops a shared kernel becoming the place
+  coupling hides.
+end note
+
+note bottom of PLATFORM
+  allowedDependencies = {} and NOTHING depends on it. Security
+  is applied to modules from outside, by one filter chain
+  (ADR-015), rather than reached for from inside them. That is
+  why no business module can name the Role type, and why both
+  web adapters duplicate the ROLE_* authority literals instead
+  — an accepted cost recorded in ADR-015 Amendment 1.
+
+  ADR-014: platform carries only the web-adapter ring, no
+  domain or application ring, because it has no domain.
+end note
+
+note right of COMPETENCY
+  Untouched by Step 3 and Step 4 (empty diff under
+  competency/src/main across both). Step 5 is the first step
+  to change it: +62/-6 across four existing files, plus four
+  new ones. Zero deletions, zero renames, and no published
+  api signature changed — competency.api gained only new
+  types. Measured in the Step 5 completion review.
+
+  ADR-012: EMF lives here and nowhere else. No EObject
+  crosses this boundary; the model is compiled to a flat
+  snapshot INSIDE this module before it is published.
+end note
+
+note bottom of GAP
+  The only module with two inbound published contracts, and
+  the reason the two edge styles above differ.
+
+  Competency is read ASYNCHRONOUSLY: a registered model is
+  projected into gap_analysis by an @ApplicationModuleListener
+  travelling Modulith's durable publication registry. The
+  compile-time arrow points gapanalysis -> competency; the
+  runtime event points the other way, so neither module calls
+  the other.
+
+  Learner is read SYNCHRONOUSLY through two published ports.
+  The asymmetry is the decision, not an inconsistency in it:
+  a competency model is a large, rarely-changing EMF graph,
+  while attainment is small, per-learner and wanted fresh
+  (ADR-022).
+end note
+
+note bottom of RECO
+  Declares the edges ADR-006 will need, but gapanalysis.api
+  publishes only SkillGapId today, so there is nothing yet to
+  consume. Recorded as a stated boundary of the slice rather
+  than an implied gap: if Recommendation turns out to consume
+  whole reports, GapReportId is promoted from
+  gapanalysis.domain.model to gapanalysis.api unchanged.
+end note
+
+note as SCHEMAS
+  **Persistence isolation (ADR-011): one schema per module,**
+  **no cross-schema foreign key, migrations namespaced by range.**
+
+  common          V1–V99     module schemas + Modulith event_publication
+  competency      V100–V199  framework_model (jsonb M1 graph, ADR-005)
+  learner         V200–V299  profile · proficiency_assertion · evidence_record
+  catalogue       V300–V399  (unused)
+  gap_analysis    V400–V499  V400 projection (derived) · V401 gap reports (authored)
+  recommendation  V500–V599  (unused)
+
+  gap_analysis is the only schema holding both derived and authored
+  data, and the split is deliberate: V400's rows are rebuilt by
+  replaying an event, V401's cannot be rebuilt at all.
+
+  Cross-context references — competency_id, framework_id, learner_id —
+  are identifier values with no foreign key and no existence check
+  (ADR-019). Foreign keys INSIDE a schema are mandatory.
+end note
+
+note as ENFORCEMENT
+  **This graph is enforced, not documented.**
+
+  ModularityTests.moduleTopologyIsValid() verifies the declared
+  topology and fails on any dependency not shown here, including
+  cycles. Seven ArchUnit rules in HexagonalArchitectureTests enforce
+  the ring structure *within* each module — see
+  docs/reviews/fitness-function-report.md.
+
+  Nine checks total, unchanged in count since Step 3.
+end note
+
+SCHEMAS .. CTX
+ENFORCEMENT .. CTX
+@enduml

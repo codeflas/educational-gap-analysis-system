@@ -1,0 +1,232 @@
+@startuml gapanalysis-module-internal
+' Ports-and-adapters inside the Gap Analysis module, as implemented at the end of Step 5.
+' Dependencies point inwards only; the domain ring knows no framework.
+skinparam componentStyle rectangle
+
+package "competency.api (named interface)" {
+  [CompetencyId · CompetencyFrameworkId] as CID
+  [CompetencyModelSnapshot] as SNAP
+  [CompetencyModelRegistered\n(integration event)] as EVT
+}
+
+package "learner.api (named interface)" {
+  [LearnerId] as LID
+  [LearnerAttainmentQuery\nAttainedCompetency] as LAQ
+  [LearnerIdentityQuery] as LIQ
+}
+
+package "gapanalysis.api (named interface)" {
+  [SkillGapId] as SGID
+}
+
+package "domain.model — authored" {
+  [GapReport\n(aggregate root)] as REPORT
+  [SkillGap\n(one finding)] as GAP
+  [AnalysisTarget\n(what it was measured against)] as TGT
+  [AttainmentSnapshot\n(what was attained, or absent)] as ATT
+  [EvidenceSnapshot\n(provenance, owned here)] as EVS
+  [GapSeverity · GapReportId] as GVO
+  [GapReportSummary\n(read model)] as SUM
+  [NotFound · ForbiddenScope ·\nNotProjected · UnknownTargetLevel] as EXC
+}
+
+package "domain.model — derived (ADR-007)" {
+  [ProjectedCompetencyModel] as PMODEL
+  [ProjectedCompetency · ProjectedLevel] as PCOMP
+}
+
+package "domain.policy" {
+  [GapSeverityPolicy\n(domain service port)] as POL
+  [OrdinalDistanceSeverityPolicy\n(default)] as ODP
+}
+
+package "domain (driven ports)" {
+  [GapReportRepository] as RREPO
+  [CompetencyModelProjectionRepository] as PREPO
+}
+
+package "application" {
+  [GapAnalysisService\n(transaction boundary · ownership)] as SVC
+  [AnalyseGapCommand] as CMD
+  [GapAnalysisModuleConfiguration] as MCFG
+}
+
+package "infrastructure.web" {
+  [GapReportController\n/api/gap-reports] as CTRL
+  [GapAnalysisWebMapper] as WMAP
+  [ExceptionHandler -> RFC 9457] as EXH
+  [Request / Response DTOs] as DTO
+}
+
+package "infrastructure.projection" {
+  [CompetencyModelProjectionListener\n@ApplicationModuleListener] as LIS
+}
+
+package "infrastructure.persistence" {
+  [JpaGapReportRepository] as JRR
+  [JpaCompetencyModelProjectionRepository] as JPR
+  [GapReport · SkillGap · GapEvidence\nJPA entities (V401)] as ENT1
+  [ProjectedFramework · ProjectedCompetency\nJPA entities (V400)] as ENT2
+}
+
+CTRL --> SVC
+CTRL --> WMAP
+CTRL --> DTO
+CTRL --> EXH
+WMAP --> CMD
+SVC --> CMD
+SVC --> REPORT
+SVC --> RREPO
+SVC --> PREPO
+SVC --> POL
+SVC --> EXC
+SVC --> LAQ
+SVC --> LIQ
+MCFG --> ODP
+
+REPORT --> GAP
+REPORT --> LID
+REPORT --> GVO
+GAP --> SGID
+GAP --> TGT
+GAP --> ATT
+GAP --> POL
+TGT --> CID
+ATT --> EVS
+PMODEL --> PCOMP
+PCOMP --> CID
+ODP .up.|> POL
+
+LIS --> EVT
+LIS --> SNAP
+LIS --> PREPO
+JRR .up.|> RREPO
+JRR --> ENT1
+JPR .up.|> PREPO
+JPR --> ENT2
+JPR --> PMODEL
+RREPO --> SUM
+
+note right of REPORT
+  ADR-021: a report is SELF-CONTAINED and stated as of an
+  instant. Every finding carries its own target, attainment
+  and provenance, so Recommendation can synthesise a pathway
+  without reaching back into the contexts that produced them
+  — which is what keeps the module DAG acyclic.
+
+  Invariant inside the boundary: at most one finding per
+  competency, enforced in generate() AND reconstitute(), and
+  backed at rest by uq_skill_gap_report_competency.
+
+  No mutators and no invalidation. Recomputation adds a
+  report; it never replaces one, so history survives.
+end note
+
+note bottom of ATT
+  ABSENCE IS MODELLED BY ABSENCE. A competency nothing has
+  been measured for holds no snapshot at all — not a
+  zero-ordinal one — and the distinction survives storage
+  (three nullable columns under ck_skill_gap_attainment_complete)
+  and serialisation (the field is omitted, not zeroed).
+
+  "Never assessed" and "assessed at the lowest level" are
+  different problems calling for different remedies: an
+  assessment, not a learning intervention.
+end note
+
+note bottom of EVS
+  Gap Analysis OWNS this type rather than reusing Learner
+  Profiling's published EvidenceSummary. A stored report must
+  stay explicable indefinitely, and reusing another context's
+  contract would make every historical report's shape hostage
+  to that contract's evolution. The copy is taken in
+  GapAnalysisService, at the boundary — the anti-corruption
+  step ADR-021's snapshot rule requires.
+end note
+
+note right of POL
+  ADR-021: severity is the one genuine judgement here, so it
+  is the only thing whose variation is interesting. Two
+  methods, not one taking a nullable attainment — absence is
+  a different question ("what does it mean that nothing was
+  measured") and splitting it stops a policy sliding into
+  treating unassessed as a shortfall from zero.
+
+  Third independent use of the substitutable-strategy
+  technique, after ADR-006 and ADR-018, which is what makes
+  it an architectural property rather than a one-off.
+end note
+
+note bottom of PMODEL
+  ADR-007 / ADR-022: the one CQRS surface in the system.
+  DERIVED — nothing here is authored, the source of truth
+  stays in competency.framework_model, and a defect is
+  repaired by replaying the event rather than migrating data.
+
+  Held as flat rows so gap computation never traverses an
+  EMF graph; compilation happens inside Competency Modelling
+  before publication, because ADR-012 forbids an EObject from
+  crossing the boundary at all.
+end note
+
+note bottom of LIS
+  Event delivery is a delivery mechanism, exactly as HTTP is,
+  so the listener sits in the adapter ring.
+  @ApplicationModuleListener makes it asynchronous AND
+  transactional: async so a projection failure cannot roll
+  back the registration that triggered it, transactional so
+  the durable registry marks delivery complete only when the
+  consuming transaction commits.
+
+  Redelivery is therefore expected and harmless — the write
+  is a replacement, not an append.
+end note
+
+note bottom of CTRL
+  Ownership authorisation (ADR-015 Amendment 2) is enforced
+  in two places, and neither is sufficient alone:
+
+  (1) SecurityConfig (platform) — one ordered chain rule
+        /api/gap-reports/** -> authenticated()
+      No role rule, and its ABSENCE is the decision: every
+      operation is learner-scoped, which is precisely what a
+      URL pattern cannot express.
+  (2) GapAnalysisService — the caller's subject resolved to a
+        LearnerId via learner.api, then compared.
+
+  TWO DENIAL SHAPES, because the disclosure differs:
+    GET /{id}            -> 404 for absent AND forbidden; a
+                            lookup happened, so 403 would
+                            confirm the report exists — and a
+                            report names its learner.
+    POST · GET ?learnerId -> 403; the identifier came from the
+                            caller and is never looked up, so
+                            refusing discloses nothing.
+end note
+
+note right of SVC
+  ADR-016: the caller's subject arrives as a command field,
+  never from SecurityContextHolder — a rule
+  applicationStaysOutOfAdapters enforces. The whole ownership
+  matrix is therefore exercisable with no security context,
+  no token and no Spring container, which
+  GapAnalysisServiceTests demonstrates rather than asserts.
+
+  callerMayAnalyseAnyLearner is a DECISION, not a role: the
+  security layer resolves the role question and passes a
+  boolean, so this module never meets the Role type, which
+  lives in platform and which its DAG forbids it to reach.
+end note
+
+note bottom of JRR
+  ADR-020's test applied a second time: relational, not jsonb,
+  because a report's shape is fixed by Java types and two of
+  its invariants are expressible only as constraints.
+
+  Rehydration goes exclusively through reconstitute(). Running
+  a GapSeverityPolicy on load would silently restate a
+  historical judgement under whatever rule is configured
+  today, and would mint fresh ids for findings that already
+  have published ones.
+end note
+@enduml
