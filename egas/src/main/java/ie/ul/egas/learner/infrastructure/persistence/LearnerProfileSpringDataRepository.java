@@ -3,6 +3,7 @@ package ie.ul.egas.learner.infrastructure.persistence;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +28,15 @@ interface LearnerProfileSpringDataRepository extends JpaRepository<LearnerProfil
     Optional<LearnerProfileJpaEntity> findWithAssertionsByAuthSubject(String authSubject);
 
     boolean existsByAuthSubject(String authSubject);
+
+    /**
+     * The identifier alone, for the published identity contract. Deliberately not
+     * {@code findWithAssertionsByAuthSubject}: resolving a principal to a learner reads one column,
+     * and hydrating an assertion graph to discard it would be the opposite of the projection
+     * discipline every other listing here follows.
+     */
+    @Query("select p.id from LearnerProfileJpaEntity p where p.authSubject = :authSubject")
+    Optional<UUID> findIdByAuthSubject(@Param("authSubject") String authSubject);
 
     @Query("""
             select p.id as id,
