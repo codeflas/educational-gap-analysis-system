@@ -24,6 +24,13 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  *
  * <p>The Step-1 {@code failOnEmptyShould=false} override has been removed: every rule now has a
  * populated selection, so an empty match once again fails the build (typo protection restored).
+ *
+ * <p>Step 5 Phase 4 strengthens {@code domainIsFrameworkFree} with {@code org.hibernate..}. The rule
+ * banned JPA's own package but not Hibernate's, so a domain class annotated {@code @BatchSize},
+ * {@code @Immutable} or {@code @Type} would have passed — a hole that widened as Phase 2 and Phase 4
+ * added ORM-specific mapping beside a domain ring that must stay pure. This is a strengthening of an
+ * existing rule rather than a new one, as ADR-016 made to {@code applicationStaysOutOfAdapters}; the
+ * count remains seven ArchUnit rules plus two Spring Modulith verifications.
  */
 @AnalyzeClasses(packages = "ie.ul.egas", importOptions = ImportOption.DoNotIncludeTests.class)
 class HexagonalArchitectureTests {
@@ -35,6 +42,7 @@ class HexagonalArchitectureTests {
                     "org.springframework..",
                     "jakarta.persistence..",
                     "jakarta.servlet..",
+                    "org.hibernate..",
                     "com.fasterxml.jackson..")
             .because("the domain core must be testable and reusable without any framework (Clean Architecture)");
 

@@ -217,7 +217,8 @@ All nine architecture tests are expected to pass **unmodified**.
 | **1 — Contracts + event infrastructure** | `competency.api` event and snapshot; the in-module compiler; `learner.api` query and its adapter; `spring-modulith-starter-jpa`; `V2__` registry. | Green; event round-trip asserted with `PublishedEvents`; **producer diff measured** |
 | **2 — Projection** | `V400__` projection tables (A4: projection only; gap tables move to `V401__` in phase 4); `@ApplicationModuleListener`; projection repository and adapter. | **Delivered**: green; **+16 (184 actual)**; registering a framework populates the projection end to end, with delivery proven to travel the durable registry |
 | **3 — Domain** | `GapReport`, `SkillGap`, snapshots, `GapSeverityPolicy` + default. Framework-free. | **Delivered**: green; **+43 (228 actual)**; severity substitutable through `GapSeverityPolicy` without touching the aggregate, storage or the API |
-| **4 — Application + persistence** | `GapAnalysisService`, `AnalyseGapCommand`, gap tables and adapter, ownership per ADR-015 A1/ADR-016. | Green; ownership matrix with no security infrastructure |
+| **4a — Persistence** | `V401__` gap tables; `GapReportRepository` port; JPA adapter and its three mapping entities; `GapReportSummary` read model. | **Delivered**: green; **+14 (242 actual)**; absence and stored severity both proven to survive a round trip on real PostgreSQL, and both aggregate invariants enforced at rest |
+| **4b — Application + ownership** | `GapAnalysisService`, `AnalyseGapCommand`, ownership per ADR-015 A1/ADR-016. Blocked on the identity finding in A7. | Green; ownership matrix with no security infrastructure |
 | **5 — Web adapter** | Controller, mapper, advice, DTOs; `SecurityConfig` gap rules. | Green; role/ownership matrix with real tokens; 404 non-disclosure |
 | **6 — Documentation & evidence** | Module diagram; evidence pack incl. the integration-cost measurement; completion review; ADR-019 closure note. | DoD met; step report; stop |
 
@@ -248,6 +249,40 @@ analytical core.
 > so this is the established convention rather than a new one. If report-level addressing is ever
 > required across a boundary, `GapReportId` is promoted to `api` unchanged — a purely additive move
 > that costs nothing to defer and would cost a published contract to pre-empt.
+
+> **Amendment A7 (4 Aug 2026, phase 4).** Phase 4 is **split into 4a (persistence) and 4b
+> (application + ownership)**, because designing 4a surfaced a dependency that 4b cannot satisfy as
+> the published contracts stand.
+>
+> **The finding.** ADR-015 Amendment 1 places ownership enforcement in the application layer,
+> evaluated against the loaded resource, with the caller's subject arriving as an explicit command
+> field (ADR-016). `LearnerProfileService` can do this because `LearnerProfile` *holds* the
+> `AuthSubject` and answers `isOwnedBy`. `GapReport` holds a `LearnerId` and nothing else — by
+> design, since ADR-021 makes a report self-contained and an auth subject is not part of the finding
+> it records. Deciding "is this caller the learner this report is about" therefore requires mapping
+> an authenticated subject to a `LearnerId`, and **`learner.api` publishes no such mapping**:
+> `AuthSubject` and `findByAuthSubject` live in `learner.domain`, which the module DAG forbids Gap
+> Analysis from reaching. The web adapter is no escape — it sits inside `gapanalysis` and is bound by
+> the same rule.
+>
+> **Options, and the recommendation.** (a) Publish the resolution as an additive `learner.api` read
+> contract, consistent with ADR-017's placement of the principal-to-profile mapping at the
+> application boundary and with ADR-022's synchronous posture for small per-learner reads — at the
+> cost of a *second* producer-side change in Step 5, which must be measured and reported as Phase 1's
+> was. (b) Store the owning auth subject on the report, making ownership self-contained; rejected as
+> the default, because it copies an identity value into a second context's schema and leaves an
+> educator generating a report *for* a learner unable to supply a subject they do not hold.
+> (c) Resolve it in the web adapter — not available, per the DAG. **(a) is recommended and awaits
+> approval**; nothing in 4a depends on the choice, which is why the phases were split rather than the
+> decision rushed.
+>
+> **Fitness function strengthened.** `domainIsFrameworkFree` gains `org.hibernate..`. The rule banned
+> JPA's own package but not Hibernate's, so a domain class annotated `@BatchSize`, `@Immutable` or
+> `@Type` would have passed — a hole that widened as phases 2 and 4a added ORM-specific mapping
+> beside a domain ring that must stay pure. Like ADR-016's amendment to
+> `applicationStaysOutOfAdapters`, this strengthens an existing rule rather than adding one: the
+> count remains seven ArchUnit rules plus two Spring Modulith verifications, and the strengthening
+> was verified to catch a violation the previous wording admitted.
 
 ---
 
