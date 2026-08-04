@@ -216,7 +216,7 @@ All nine architecture tests are expected to pass **unmodified**.
 |---|---|---|
 | **1 — Contracts + event infrastructure** | `competency.api` event and snapshot; the in-module compiler; `learner.api` query and its adapter; `spring-modulith-starter-jpa`; `V2__` registry. | Green; event round-trip asserted with `PublishedEvents`; **producer diff measured** |
 | **2 — Projection** | `V400__` projection tables (A4: projection only; gap tables move to `V401__` in phase 4); `@ApplicationModuleListener`; projection repository and adapter. | **Delivered**: green; **+16 (184 actual)**; registering a framework populates the projection end to end, with delivery proven to travel the durable registry |
-| **3 — Domain** | `GapReport`, `SkillGap`, snapshots, `GapSeverityPolicy` + default. Framework-free. | Green; severity substitutable via a lambda |
+| **3 — Domain** | `GapReport`, `SkillGap`, snapshots, `GapSeverityPolicy` + default. Framework-free. | **Delivered**: green; **+43 (228 actual)**; severity substitutable through `GapSeverityPolicy` without touching the aggregate, storage or the API |
 | **4 — Application + persistence** | `GapAnalysisService`, `AnalyseGapCommand`, gap tables and adapter, ownership per ADR-015 A1/ADR-016. | Green; ownership matrix with no security infrastructure |
 | **5 — Web adapter** | Controller, mapper, advice, DTOs; `SecurityConfig` gap rules. | Green; role/ownership matrix with real tokens; 404 non-disclosure |
 | **6 — Documentation & evidence** | Module diagram; evidence pack incl. the integration-cost measurement; completion review; ADR-019 closure note. | DoD met; step report; stop |
@@ -224,6 +224,30 @@ All nine architecture tests are expected to pass **unmodified**.
 Phase 1 is deliberately first and deliberately small: it is the only phase that touches another
 module, and isolating it makes the integration cost measurable rather than entangled with the
 analytical core.
+
+> **Amendment A5 (4 Aug 2026, phase 3).** The phase 3 gate originally read *"severity substitutable
+> via a lambda"*. **A lambda is not the property that matters, and requiring one would have weakened
+> the port.** `GapSeverityPolicy` declares two methods — `severityFor(target, attainment)` and
+> `severityForUnassessed(target)` — so it is deliberately not a functional interface. A single method
+> taking a nullable or `Optional` attainment lets an implementer slide into treating "nothing has
+> been measured" as a shortfall from zero, which is precisely the collapse ADR-021 forbids; splitting
+> the two makes absence a question an implementer must answer on its own terms. The gate now states
+> the property actually claimed: an institution can replace the severity rule without touching the
+> aggregate, storage or the API. This is demonstrated by an alternative policy in
+> `OrdinalDistanceSeverityPolicyTests` — one that judges absence more harshly than any shortfall,
+> the institutional variation the second method exists for — and by a stub in `SkillGapTests` that
+> proves the aggregate delegates both cases rather than deciding either.
+
+> **Amendment A6 (4 Aug 2026, phase 3).** Gap identity is split across two packages, and the split
+> is intentional. **`SkillGapId` is published in `gapanalysis.api`**: it identifies an individual
+> gap, which its own javadoc describes as "one element of a gap analysis result set", and an element
+> is what a downstream context addresses — Recommendation (ADR-006) synthesises a pathway from
+> gaps. **`GapReportId` stays module-internal in `gapanalysis.domain.model`**: no other context
+> addresses a whole report today, and publishing an identifier before a consumer exists would widen
+> the module contract on speculation. The same reasoning governs `AssertionId` in Learner Profiling,
+> so this is the established convention rather than a new one. If report-level addressing is ever
+> required across a boundary, `GapReportId` is promoted to `api` unchanged — a purely additive move
+> that costs nothing to defer and would cost a published contract to pre-empt.
 
 ---
 
