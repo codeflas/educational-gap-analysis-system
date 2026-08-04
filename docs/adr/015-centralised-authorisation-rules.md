@@ -123,3 +123,48 @@ places: the ordered rules here, and the ownership predicate in the application s
 already recorded that split as the accepted cost of a chain that cannot express ownership; this
 amendment makes it concrete rather than hypothetical, and the two locations are named in the module
 diagram so neither can be read without the other.
+
+---
+
+## Amendment 2 — ownership for gap reports, and when denial should *not* look like absence (Step 5 Phase 4b, Accepted 2026-08-04)
+
+Amendment 1 established that ownership predicates are evaluated at the application layer, where the
+resource is in hand, and that a learner requesting another learner's profile receives 404 rather
+than 403. Gap Analysis is the second context to own a learner-scoped resource, and applying that
+amendment literally would have got one of its three operations wrong.
+
+**Ownership is a comparison of identifiers, not an aggregate question.** A `GapReport` holds a
+`LearnerId` and no subject, because ADR-021 makes a report a self-contained record of a finding and
+an authentication-derived value is not part of one. There is therefore no `isOwnedBy` to ask.
+`GapAnalysisService` resolves the caller's subject to a `LearnerId` through
+`LearnerIdentityQuery` (ADR-017 Amendment 1) and compares. A caller with no profile resolves to
+nothing and so owns nothing, which is the correct reading of explicit provisioning rather than an
+error. Role interpretation stays in the security layer exactly as Amendment 1 requires: the web
+adapter resolves it to `callerMayAnalyseAnyLearner` / `callerMayReadAny` and passes a boolean, so
+`gapanalysis` never meets the security vocabulary.
+
+**Two denials, because the disclosure differs.** Amendment 1's 404 rule exists because answering
+"forbidden" for a resource named by identifier confirms that the identifier is real. That reasoning
+holds for `getReportForReader` and is applied there — absence and denial raise the same
+`GapReportNotFoundException`, and a gap report is *more* disclosive than a profile, since it names
+the learner it is about.
+
+It does not hold for `analyse` and `listReportsForLearner`. Both are scoped by a `learnerId` the
+caller supplies, and neither looks it up — ADR-019 leaves cross-context references unvalidated — so
+refusing reveals nothing whatsoever about whether that learner exists, is enrolled, or has reports.
+These raise `ForbiddenLearnerScopeException`, which a web adapter renders as 403. Answering 404
+instead would be a less accurate diagnostic bought with no privacy gain, and would teach the next
+reader that the rule is "always 404" rather than "never confirm the existence of something you
+looked up".
+
+**The rules this adds to the chain** are recorded when the web adapter lands in Phase 5; nothing in
+the filter chain changes for Phase 4b, which has no endpoints.
+
+**Consequence for the reader.** The access policy now spans three places rather than two: the ordered
+rules here, the ownership predicate in `LearnerProfileService`, and the ownership predicate in
+`GapAnalysisService`. That growth is the accepted cost recorded in the original trade-offs, and the
+mitigation is unchanged — each predicate is exercised cell by cell in tests that need no security
+infrastructure at all: `LearnerProfileServiceTests` for profiles, `GapAnalysisServiceTests` for gap
+reports, with `GapAnalysisIntegrationTests` proving the same matrix holds once the real identity
+adapter is on the path. Naming them here is deliberate: Amendment 1 originally cited a test class
+that was never written, and `docs/check-doc-references.sh` now resolves citations of this kind.

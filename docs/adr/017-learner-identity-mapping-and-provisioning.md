@@ -92,3 +92,49 @@ Should a profile ever need several credentials — institutional SSO alongside a
 attribute becomes a collection and the unique constraint moves to a child table, without
 disturbing `LearnerId` or any consumer. If GDPR erasure becomes in scope, the subject is the field
 to clear first, since it is the only value linking a profile to a person outside the system.
+
+---
+
+## Amendment 1 — the resolution is published; the mapping is not (Step 5 Phase 4b, Accepted 2026-08-04)
+
+This ADR decided that a subject is resolved to a profile by
+`LearnerProfileRepository.findByAuthSubject`, inside Learner Profiling, rather than derived from the
+subject or held by the security layer. Step 5 needs that resolution from outside this context, and
+this amendment records how it is exposed without moving it.
+
+**Why it is needed.** ADR-015 Amendment 1 evaluates ownership against the loaded resource, using the
+caller's subject as a command field (ADR-016). Learner Profiling can do that unaided because
+`LearnerProfile` holds the subject and answers `isOwnedBy`. A `GapReport` holds a `LearnerId` and
+nothing else, deliberately: ADR-021 makes a report self-contained, and an authentication-derived
+value is not part of the finding it records. So Gap Analysis must ask who a principal is, and
+`AuthSubject` and `findByAuthSubject` live in `learner.domain`, which the module DAG puts out of its
+reach. Without this, ownership is inexpressible for any resource owned by a learner but stored by
+another context.
+
+**Decision.** `learner.api` publishes `LearnerIdentityQuery`, one method, returning
+`Optional<LearnerId>` for an opaque subject string. Empty means the principal has no profile, which
+is an ordinary outcome under this ADR's explicit-provisioning rule and reads to a consumer as "owns
+nothing".
+
+**What does not change.** The mapping stays where this ADR put it. Consumers learn a `LearnerId` and
+nothing else — not the subject's relationship to a profile, not a display name, not an assertion.
+Nothing is stored outside Learner Profiling, so ADR-013's substitution of the identity source still
+changes only what the stored string contains. The alternative considered and rejected was storing the
+owning subject on the gap report itself: it would copy an identity value into a second context's
+schema, and would leave an educator generating a report *for* a learner unable to supply a subject
+they do not hold.
+
+**Placement: an adapter, not an application service.** `JpaLearnerIdentityQuery` sits in
+`learner.infrastructure.persistence` beside `JpaLearnerAttainmentQuery`, and reads one column. This
+ADR calls the mapping an application-*boundary* concern, meaning it is resolved inside Learner
+Profiling rather than by the security layer or through another context's schema — which a published
+port satisfies exactly. What it is not is a use case: there is no orchestration, no policy and
+nothing to decide. Routing it through `LearnerProfileService` would forward a call, and doing so
+through `findByAuthSubject` would hydrate an entire assertion graph to read a single identifier on a
+path taken by every ownership check. Should resolution ever acquire a rule — several credentials per
+profile, or the principal rename this ADR's future evolution anticipates — it moves to the
+application layer and the port's signature does not change.
+
+**Anti-oracle constraint.** ADR-016 already forbids taking a subject from a request body; the
+controller is the only legitimate source. That rule is what keeps this contract from becoming a way
+to map arbitrary principals to learner identifiers, and any consumer of it inherits the obligation.

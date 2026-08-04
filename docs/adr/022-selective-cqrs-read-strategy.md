@@ -105,3 +105,33 @@ that makes synchronous calls unattractive, its attainment can be projected by th
 already built for competency — the decision to query rather than project is reversible, and this
 ADR is where the reversal would be recorded. If the contexts are ever deployed separately, the
 synchronous edge is the one to reconsider first.
+
+---
+
+## Amendment 1 — a second synchronous contract, and what the producer diff actually cost (Step 5 Phase 4b, Accepted 2026-08-04)
+
+This ADR decided that Learner Profiling is read synchronously through a published query contract
+while Competency Modelling is projected. Phase 4b adds a second contract on the same side of that
+asymmetry, and the addition is worth recording because the decision it tests is not "how do we read
+attainment" but "how far does synchronous reading extend".
+
+**What is added.** `learner.api.LearnerIdentityQuery`, resolving an authenticated subject to a
+`LearnerId` (ADR-017 Amendment 1). It passes the same data-shape test that put attainment on the
+synchronous side, and passes it more strongly: the answer is a single identifier, it is wanted on
+every ownership check, and it must be exactly current — a projected copy could authorise a caller
+against a profile that had since been removed, which is the one staleness this system must not have.
+
+**The asymmetry is unchanged.** This is not a general licence to publish query ports. Both learner
+contracts exist because the data is small, per-learner and wanted fresh; the competency model stays
+projected because it is a large, rarely-changing EMF graph that ADR-012 forbids from crossing the
+boundary at all. A future contract is admitted by that test or not at all.
+
+**Producer-side integration cost, measured.** ADR-022 required the change to a producer to be small,
+purely additive, contract-shaped, and *measured rather than claimed*. For Phase 4b, inside
+`learner/src/main`: two new files (the published interface and its adapter) and **+10/−0 lines in one
+existing file** — a projection query on `LearnerProfileSpringDataRepository`, of which three lines
+are code (an import, the query annotation and the method signature) and the rest is its javadoc.
+Zero modified signatures, zero deletions, no schema change, no change to the aggregate, no change to
+any existing method. This is the second producer measurement in Step 5, after Phase 1's change to Competency
+Modelling, and it is the more informative of the two: it shows that serving a second, unanticipated
+consumer need cost a producer one query and one adapter.

@@ -139,6 +139,32 @@ Implemented by an adapter in `learner.infrastructure.persistence` reading throug
 repository — no new table, no change to the aggregate, and no change to the ownership rules, since
 Gap Analysis asks for a learner it was already authorised to analyse.
 
+> **Amendment A8 (4 Aug 2026, phase 4b).** The last clause above was **wrong, and its being wrong is
+> what A7 found**: Gap Analysis was never authorised to analyse anyone, because it had no way to
+> decide who the caller was. This section therefore gains a **second published contract**:
+>
+> ```
+> learner/api/
+> └── LearnerIdentityQuery.java     NEW — Optional<LearnerId> learnerIdFor(String authSubject)
+> ```
+>
+> A `GapReport` holds a `LearnerId` and no subject (ADR-021), so ownership cannot be an aggregate
+> question the way `LearnerProfile.isOwnedBy` is; it is a comparison of identifiers, and the
+> comparison needs a resolution only Learner Profiling can perform. Recorded as **ADR-017 Amendment 1**
+> (what is published, and why the mapping does not move), **ADR-022 Amendment 1** (why it belongs on
+> the synchronous side, with the producer diff measured), and **ADR-015 Amendment 2** (the ownership
+> rules, and why two of the three operations refuse outright instead of answering 404).
+>
+> **Producer diff, measured — the second of Step 5's two.** Inside `learner/src/main`: two new files
+> and **+10/−0 lines in one existing file**, of which three lines are code. Zero modified signatures,
+> zero deletions, zero schema change. Phase 1 measured what it costs a producer to announce something;
+> this measures what it costs to serve a consumer need nobody anticipated, and the answer is one
+> projection query and one adapter.
+>
+> **Rejected:** storing the owning `AuthSubject` on the gap report. It would copy an identity value
+> into a second context's schema and leave an educator generating a report *for* a learner unable to
+> supply a subject they do not hold.
+
 ---
 
 ## 4. Event shape and delivery
@@ -218,7 +244,7 @@ All nine architecture tests are expected to pass **unmodified**.
 | **2 — Projection** | `V400__` projection tables (A4: projection only; gap tables move to `V401__` in phase 4); `@ApplicationModuleListener`; projection repository and adapter. | **Delivered**: green; **+16 (184 actual)**; registering a framework populates the projection end to end, with delivery proven to travel the durable registry |
 | **3 — Domain** | `GapReport`, `SkillGap`, snapshots, `GapSeverityPolicy` + default. Framework-free. | **Delivered**: green; **+43 (228 actual)**; severity substitutable through `GapSeverityPolicy` without touching the aggregate, storage or the API |
 | **4a — Persistence** | `V401__` gap tables; `GapReportRepository` port; JPA adapter and its three mapping entities; `GapReportSummary` read model. | **Delivered**: green; **+14 (242 actual)**; absence and stored severity both proven to survive a round trip on real PostgreSQL, and both aggregate invariants enforced at rest |
-| **4b — Application + ownership** | `GapAnalysisService`, `AnalyseGapCommand`, ownership per ADR-015 A1/ADR-016. Blocked on the identity finding in A7. | Green; ownership matrix with no security infrastructure |
+| **4b — Application + ownership** | `GapAnalysisService`, `AnalyseGapCommand`, `learner.api.LearnerIdentityQuery` and its adapter, four outcome exceptions, ownership per ADR-015 A2/ADR-016. | **Delivered**: green; **+31 (273 actual)**; ownership matrix proven with no security infrastructure, and the whole slice proven end to end across three contexts |
 | **5 — Web adapter** | Controller, mapper, advice, DTOs; `SecurityConfig` gap rules. | Green; role/ownership matrix with real tokens; 404 non-disclosure |
 | **6 — Documentation & evidence** | Module diagram; evidence pack incl. the integration-cost measurement; completion review; ADR-019 closure note. | DoD met; step report; stop |
 
